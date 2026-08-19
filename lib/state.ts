@@ -495,6 +495,12 @@ function rejectTx(state: SessionState, ref: string): SessionState {
 }
 
 function saveWithdrawal(state: SessionState): SessionState {
+  if (state.tx.ref && state.transactions.some((t) => t.ref === state.tx.ref)) {
+    return {
+      ...state,
+      message: { kind: "info", text: `Transaction ${state.tx.ref} is already saved and authorized.` },
+    };
+  }
   const amount = parseAmount(state.tx.amount || "0");
   const customer = state.tx.customer!;
   const charge = state.tx.charge ?? 1.0;
@@ -578,7 +584,7 @@ function saveWithdrawal(state: SessionState): SessionState {
 
   return {
     ...state,
-    tx: { ...state.tx, ref },
+    tx: { ...state.tx, ref, customer: newCustomers[customer.acc] },
     transactions: [...state.transactions, tx],
     customers: newCustomers,
     tillBalance: state.tillBalance - amount,
@@ -604,8 +610,10 @@ function reverseTx(state: SessionState, ref: string): SessionState {
   }
   const tx = state.transactions[txIndex];
   const customer = state.customers[tx.account];
-  const newAvail = tx.fnId === "1001" ? customer.avail + tx.amount + tx.charge : customer.avail - tx.amount + tx.charge;
-  const newCustomers = { ...state.customers, [tx.account]: { ...customer, bal: newAvail, avail: newAvail } };
+  const delta = tx.fnId === "1001" ? tx.amount + tx.charge : -tx.amount + tx.charge;
+  const newBal = customer.bal + delta;
+  const newAvail = customer.avail + delta;
+  const newCustomers = { ...state.customers, [tx.account]: { ...customer, bal: newBal, avail: newAvail } };
   const newTransactions = [...state.transactions];
   newTransactions[txIndex] = { ...tx, status: "reversed" };
 
