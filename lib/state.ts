@@ -339,7 +339,9 @@ function stepSnapshot(state: SessionState): SessionState {
     }
   }
 
-  if (step >= 14 && step <= 17) {
+  // Steps 14-16 are the authorization phase; step 17 launches the withdrawal, which the
+  // teller keys, so the supervisor context must not extend into it.
+  if (step >= 14 && step <= 16) {
     snapshot.currentUser = ENV.supervisor;
   }
 

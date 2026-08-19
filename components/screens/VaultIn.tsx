@@ -85,7 +85,7 @@ export function VaultIn({
   };
 
   // `viaOverride` records who actually authorized: within the retention limit the
-  // transaction is auto-authorized by the maker, so no supervisor is stamped.
+  // transaction is auto-authorized, matching the "Auto" checker used elsewhere.
   const openTill = (viaOverride: boolean) => {
     const tillDenoms: Record<string, number> = {};
     for (const d of denoms) {
@@ -108,7 +108,7 @@ export function VaultIn({
           ref,
           amount: amountStr,
           denominations: structuredClone(denoms),
-          checker: viaOverride ? ENV.supervisor : ENV.teller,
+          checker: viaOverride ? ENV.supervisor : "Auto",
         },
         message: {
           kind: "ok",
