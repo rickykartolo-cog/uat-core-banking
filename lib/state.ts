@@ -225,9 +225,9 @@ export function reducer(state: SessionState, action: Action): SessionState {
     }
 
     case "SET_DENOM": {
-      const denoms =
-        state.tx.denominations ??
-        structuredClone(DEFAULT_DENOMS[state.tx.fnId ?? ""] ?? []);
+      const defaults = DEFAULT_DENOMS[state.tx.fnId ?? ""];
+      const denoms = state.tx.denominations ?? (defaults ? structuredClone(defaults) : undefined);
+      if (!denoms) return state;
       const updated = denoms.map((d) =>
         d.code === action.code ? { ...d, units: parseInt(action.units || "0", 10) || 0 } : d
       );

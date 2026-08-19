@@ -58,7 +58,7 @@ export function Withdrawal({
   const tab = tx.tab || "Denomination";
 
   const amountStr = tx.amount ?? "";
-  const denoms = tx.denominations ?? DEFAULT_DENOMS["1001"];
+  const denoms = tx.denominations ?? structuredClone(DEFAULT_DENOMS["1001"]);
   const total = denomTotal(denoms);
   const ref = tx.ref ?? "";
 
