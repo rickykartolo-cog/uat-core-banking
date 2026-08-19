@@ -129,6 +129,15 @@ export function tillClosedDialog(state: SessionState): DialogSpec {
   };
 }
 
+export function resolveDenominations(state: SessionState): Denom[] {
+  if (state.tx.denominations) return state.tx.denominations;
+  const template = DEFAULT_DENOMS[state.tx.fnId ?? ""] ?? [];
+  return template.map((d) => ({
+    ...d,
+    units: state.tx.fnId === "1401" && !state.tx.customer ? 0 : d.units,
+  }));
+}
+
 export function makeRef(product: string, serial: number): string {
   const julian = "26230";
   return `${ENV.branch}${product}${julian}${String(serial).padStart(4, "0")}`;
@@ -245,7 +254,7 @@ export function reducer(state: SessionState, action: Action): SessionState {
     }
 
     case "SET_DENOM": {
-      const denoms = state.tx.denominations ?? [];
+      const denoms = resolveDenominations(state);
       const updated = denoms.map((d) =>
         d.code === action.code ? { ...d, units: parseInt(action.units || "0", 10) || 0 } : d
       );
@@ -439,12 +448,13 @@ function denomMismatchDialog(total: number, amount: number): DialogSpec {
 
 function saveDeposit(state: SessionState): SessionState {
   const amount = parseAmount(state.tx.amount || "0");
+  const denoms = resolveDenominations(state);
   if (isTillBlocked(state, "1401")) {
     return { ...state, dialog: tillClosedDialog(state) };
   }
 
-  const total = denomTotal(state.tx.denominations);
-  if (total !== amount) {
+  const total = denomTotal(denoms);
+  if (Math.round(total * 100) !== Math.round(amount * 100)) {
     return { ...state, dialog: denomMismatchDialog(total, amount) };
   }
 
@@ -465,6 +475,7 @@ function saveDeposit(state: SessionState): SessionState {
 
 function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionState {
   const amount = parseAmount(state.tx.amount || "0");
+  const denoms = resolveDenominations(state);
   const charge = state.tx.charge ?? 2.18;
   const ref = state.tx.ref || makeRef("CHDP", state.nextSerial);
   const customer = state.tx.customer!;
@@ -483,7 +494,7 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
     checker: unauthorized ? "" : "Auto",
     authorized: !unauthorized,
     status: unauthorized ? "unauthorized" : "complete",
-    denominations: state.tx.denominations ?? [],
+    denominations: denoms,
     mod: 1,
   };
 
@@ -497,7 +508,7 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
     transactions: [...state.transactions, tx],
     customers: newCustomers,
     tillBalance: unauthorized ? state.tillBalance : state.tillBalance + amount,
-    tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "add"),
+    tillDenoms: updateTillDenoms(state.tillDenoms, denoms, "add"),
     nextSerial: state.nextSerial + 1,
     dialog: null,
     message: unauthorized
@@ -510,6 +521,9 @@ function authorizeTx(state: SessionState, ref: string): SessionState {
   const txIndex = state.transactions.findIndex((t) => t.ref === ref);
   if (txIndex < 0) return state;
   const tx = state.transactions[txIndex];
+  if (isTillBlocked(state, tx.fnId)) {
+    return { ...state, dialog: tillClosedDialog(state) };
+  }
   const customer = state.customers[tx.account];
   const newAvail = customer.avail + tx.amount - tx.charge;
   const newCustomers = { ...state.customers, [tx.account]: { ...customer, bal: newAvail, avail: newAvail } };
@@ -539,6 +553,7 @@ function saveWithdrawal(state: SessionState): SessionState {
     return { ...state, dialog: tillClosedDialog(state) };
   }
   const amount = parseAmount(state.tx.amount || "0");
+  const denoms = resolveDenominations(state);
   const customer = state.tx.customer!;
   const charge = state.tx.charge ?? 1.0;
   const required = amount + charge;
@@ -555,12 +570,12 @@ function saveWithdrawal(state: SessionState): SessionState {
     };
   }
 
-  const totalDenom = denomTotal(state.tx.denominations);
-  if (totalDenom !== amount) {
+  const totalDenom = denomTotal(denoms);
+  if (Math.round(totalDenom * 100) !== Math.round(amount * 100)) {
     return { ...state, dialog: denomMismatchDialog(totalDenom, amount) };
   }
 
-  for (const d of state.tx.denominations ?? []) {
+  for (const d of denoms) {
     if ((state.tillDenoms[d.code] ?? 0) < d.units) {
       return {
         ...state,
@@ -590,7 +605,7 @@ function saveWithdrawal(state: SessionState): SessionState {
     checker: "Auto",
     authorized: true,
     status: "complete",
-    denominations: state.tx.denominations ?? [],
+    denominations: denoms,
     mod: 1,
   };
 
@@ -602,7 +617,7 @@ function saveWithdrawal(state: SessionState): SessionState {
     transactions: [...state.transactions, tx],
     customers: newCustomers,
     tillBalance: state.tillBalance - amount,
-    tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "remove"),
+    tillDenoms: updateTillDenoms(state.tillDenoms, denoms, "remove"),
     nextSerial: state.nextSerial + 1,
     message: { kind: "ok", text: `Transaction ${ref} saved and auto-authorized. Cash paid ${ENV.ccy} ${fmt(amount)}. Account balance ${ENV.ccy} ${fmt(newAvail)}. Till cash position ${ENV.ccy} ${fmt(state.tillBalance - amount)}.` },
   };
@@ -623,6 +638,9 @@ function reverseTx(state: SessionState, ref: string): SessionState {
     };
   }
   const tx = state.transactions[txIndex];
+  if (isTillBlocked(state, tx.fnId)) {
+    return { ...state, dialog: tillClosedDialog(state) };
+  }
   const customer = state.customers[tx.account];
   const newAvail = tx.fnId === "1001" ? customer.avail + tx.amount + tx.charge : customer.avail - tx.amount + tx.charge;
   const newCustomers = { ...state.customers, [tx.account]: { ...customer, bal: newAvail, avail: newAvail } };
@@ -645,12 +663,13 @@ function transferToVault(state: SessionState): SessionState {
     return { ...state, dialog: tillClosedDialog(state) };
   }
   const amount = parseAmount(state.tx.amount || "0");
-  const total = denomTotal(state.tx.denominations);
-  if (total !== amount) {
+  const denoms = resolveDenominations(state);
+  const total = denomTotal(denoms);
+  if (Math.round(total * 100) !== Math.round(amount * 100)) {
     return { ...state, dialog: denomMismatchDialog(total, amount) };
   }
 
-  for (const d of state.tx.denominations ?? []) {
+  for (const d of denoms) {
     if ((state.tillDenoms[d.code] ?? 0) < d.units) {
       return {
         ...state,
@@ -678,7 +697,7 @@ function transferToVault(state: SessionState): SessionState {
     checker: ENV.supervisor,
     authorized: true,
     status: "complete",
-    denominations: state.tx.denominations ?? [],
+    denominations: denoms,
     mod: 1,
   };
 
@@ -686,7 +705,7 @@ function transferToVault(state: SessionState): SessionState {
     ...state,
     transactions: [...state.transactions, tx],
     tillBalance: state.tillBalance - amount,
-    tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "remove"),
+    tillDenoms: updateTillDenoms(state.tillDenoms, denoms, "remove"),
     vaultBalance: state.vaultBalance + amount,
     nextSerial: state.nextSerial + 1,
     message: { kind: "ok", text: `Transfer ${ref} authorized. Excess cash ${ENV.ccy} ${fmt(amount)} moved to vault.` },

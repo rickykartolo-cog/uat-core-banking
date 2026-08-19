@@ -5,11 +5,11 @@ import {
   SessionState,
   Action,
   Transaction,
-  DEFAULT_DENOMS,
   fmt,
   parseAmount,
   makeRef,
   isTillBlocked,
+  resolveDenominations,
 } from "@/lib/state";
 import {
   FCShell,
@@ -45,7 +45,7 @@ export function Deposit({
   const fetched = !!customer;
   const amountStr = tx.amount ?? "";
   const amount = parseAmount(amountStr);
-  const denoms = tx.denominations ?? (fetched ? DEFAULT_DENOMS["1401"] : DEFAULT_DENOMS["1401"].map((d) => ({ ...d, units: 0 })));
+  const denoms = resolveDenominations(state);
   const total = denomTotal(denoms);
   const ref = tx.ref ?? "";
 
@@ -67,12 +67,8 @@ export function Deposit({
 
   const setAmount = (v: string) => dispatch({ type: "SET_AMOUNT", amount: v });
 
-  const setDenom = (code: string, units: string) => {
-    const updated = denoms.map((d) =>
-      d.code === code ? { ...d, units: parseInt(units || "0", 10) || 0 } : d
-    );
-    dispatch({ type: "APPLY", partial: { tx: { ...tx, denominations: updated } } });
-  };
+  const setDenom = (code: string, units: string) =>
+    dispatch({ type: "SET_DENOM", code, units });
 
   const setNarrative = (v: string) =>
     dispatch({ type: "APPLY", partial: { tx: { ...tx, narrative: v } } });
@@ -384,7 +380,7 @@ export function Deposit({
           <Tabs
             tabs={["Denomination", "Charge", "MIS / UDF"]}
             active={tab}
-            onSelect={isAuth || blocked ? undefined : setTab}
+            onSelect={isAuth ? undefined : setTab}
           />
           <div className="tabwrap">{tabBody}</div>
         </div>
