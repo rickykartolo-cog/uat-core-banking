@@ -256,7 +256,7 @@ export function reducer(state: SessionState, action: Action): SessionState {
     }
 
     case "SET_DENOM": {
-      const denoms = resolveDenominations(state);
+      const denoms = resolveDenominations(state, state.tx.fnId ?? state.viewFnId);
       const updated = denoms.map((d) =>
         d.code === action.code ? { ...d, units: parseInt(action.units || "0", 10) || 0 } : d
       );

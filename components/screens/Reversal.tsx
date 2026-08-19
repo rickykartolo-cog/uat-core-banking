@@ -48,7 +48,7 @@ export function Reversal({
   const handleDialog = (action?: string) => {
     if (action === "CONFIRM_REVERSE") {
       dispatch({ type: "REVERSE_TX", ref });
-      if (targetTx && isTillBlocked(state, targetTx.fnId)) return;
+      if (!targetTx || isTillBlocked(state, targetTx.fnId)) return;
     }
     dispatch({ type: "CLOSE_DIALOG" });
   };
