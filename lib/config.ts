@@ -199,7 +199,7 @@ export const MENU: MenuItem[] = [
   {
     label: "Sign off",
     items: [
-      { label: "Sign off", placeholder: "Sign off would end the session and return to the login screen." },
+      { label: "Sign off", fnId: "Sign on" },
     ],
   },
 ];

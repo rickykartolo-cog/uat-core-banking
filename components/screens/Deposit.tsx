@@ -234,18 +234,74 @@ export function Deposit({
                 ? [
                     { label: "Authorize", primary: true, onClick: authorize },
                     { label: "Reject", onClick: reject },
-                    { label: "View accounting" },
-                    { label: "Print" },
-                    { label: "Exit" },
+                    {
+                      label: "View accounting",
+                      onClick: () =>
+                        dispatch({
+                          type: "PLACEHOLDER",
+                          message: "View accounting would display the accounting entries for this transaction.",
+                        }),
+                    },
+                    {
+                      label: "Print",
+                      onClick: () =>
+                        dispatch({
+                          type: "PLACEHOLDER",
+                          message: "Print would send the transaction to the default printer.",
+                        }),
+                    },
+                    {
+                      label: "Exit",
+                      onClick: () =>
+                        dispatch({ type: "LAUNCH_FUNCTION", fnId: "Pending authorization" }),
+                    },
                   ]
                 : [
-                    { label: "New", primary: true },
-                    { label: "Enter query" },
+                    {
+                      label: "New",
+                      primary: true,
+                      onClick: () => dispatch({ type: "LAUNCH_FUNCTION", fnId: "1401" }),
+                    },
+                    {
+                      label: "Enter query",
+                      onClick: () =>
+                        dispatch({
+                          type: "PLACEHOLDER",
+                          message: "Enter query would open the transaction lookup screen.",
+                        }),
+                    },
                     { label: "Save", onClick: save },
-                    { label: "Hold" },
-                    { label: "Clear" },
-                    { label: "Print advice", dim: !ref },
-                    { label: "Reverse", dim: true },
+                    {
+                      label: "Hold",
+                      onClick: () =>
+                        dispatch({
+                          type: "PLACEHOLDER",
+                          message: "Hold would park the transaction for later completion.",
+                        }),
+                    },
+                    {
+                      label: "Clear",
+                      onClick: () => dispatch({ type: "LAUNCH_FUNCTION", fnId: "1401" }),
+                    },
+                    {
+                      label: "Print advice",
+                      dim: !ref,
+                      onClick: ref
+                        ? () =>
+                            dispatch({
+                              type: "PLACEHOLDER",
+                              message: `Print advice would generate the customer advice for ${ref}.`,
+                            })
+                        : undefined,
+                    },
+                    {
+                      label: "Reverse",
+                      dim: existingTx?.status !== "complete",
+                      onClick:
+                        existingTx?.status === "complete"
+                          ? () => dispatch({ type: "REVERSE_TX", ref })
+                          : undefined,
+                    },
                   ]
             }
           />
@@ -325,7 +381,7 @@ export function Deposit({
           checker={checker}
           ckTime={authorized ? `${ENV.date} 09:21:07` : undefined}
           authorized={authorized}
-          recStat={ref ? "Complete" : "Not entered"}
+          recStat={existingTx?.status ? existingTx.status : ref ? "Complete" : "Not entered"}
         />
 
         {state.message && <MsgBar kind={state.message.kind} text={state.message.text} />}
