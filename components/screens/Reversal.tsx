@@ -167,7 +167,7 @@ export function Reversal({
               {sameDayTransactions.map((record) => (
                 <tr
                   key={record.ref}
-                  className={record.ref === ref ? "sel" : undefined}
+                  className={record.ref === normalizedRef ? "sel" : undefined}
                   onClick={() => setRef(record.ref)}
                   style={{ cursor: "pointer" }}
                 >
