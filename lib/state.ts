@@ -300,6 +300,7 @@ function stepSnapshot(state: SessionState): SessionState {
 
   if (step === 0) {
     snapshot.loggedIn = false;
+    snapshot.eotiMarked = false;
   }
 
   if (step >= 3 && step <= 5) {
@@ -467,7 +468,7 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
     tillBalance: unauthorized ? state.tillBalance : state.tillBalance + amount,
     tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "add"),
     nextSerial: state.nextSerial + 1,
-    eotiMarked: unauthorized ? false : state.eotiMarked,
+    eotiMarked: false,
     dialog: null,
     message: unauthorized
       ? { kind: "warn", text: `Transaction ${ref} saved. Status: unauthorized — pending supervisor authorization. Customer balance not yet updated.` }
@@ -579,6 +580,7 @@ function saveWithdrawal(state: SessionState): SessionState {
     tillBalance: state.tillBalance - amount,
     tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "remove"),
     nextSerial: state.nextSerial + 1,
+    eotiMarked: false,
     message: { kind: "ok", text: `Transaction ${ref} saved and auto-authorized. Cash paid ${ENV.ccy} ${fmt(amount)}. Account balance ${ENV.ccy} ${fmt(newAvail)}. Till cash position ${ENV.ccy} ${fmt(state.tillBalance - amount)}.` },
   };
 }
@@ -611,6 +613,7 @@ function reverseTx(state: SessionState, ref: string): SessionState {
     customers: newCustomers,
     tillBalance: state.tillBalance + tillChange,
     tillDenoms: updateTillDenoms(state.tillDenoms, tx.denominations, tx.fnId === "1001" ? "add" : "remove"),
+    eotiMarked: false,
     message: { kind: "ok", text: `Transaction ${ref} reversed. Contra entries posted and till denominations restored.` },
   };
 }
@@ -670,6 +673,7 @@ function transferToVault(state: SessionState): SessionState {
     tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "remove"),
     vaultBalance: state.vaultBalance + amount,
     nextSerial: state.nextSerial + 1,
+    eotiMarked: false,
     message: { kind: "ok", text: `Transfer ${ref} authorized. Excess cash ${ENV.ccy} ${fmt(amount)} moved to vault.` },
   };
 }
