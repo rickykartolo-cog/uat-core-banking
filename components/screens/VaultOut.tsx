@@ -62,7 +62,7 @@ export function VaultOut({
             buttons={[
               { label: "New", primary: true },
               { label: "Enter query" },
-              { label: "Save", onClick: save },
+              { label: "Save", dim: posted, onClick: posted ? undefined : save },
               { label: "Clear" },
               { label: "Exit" },
             ]}
@@ -94,7 +94,7 @@ export function VaultOut({
               required
               number
               focus
-              onChange={setAmount}
+              onChange={posted ? undefined : setAmount}
             />
           </div>
         </Section>
@@ -105,7 +105,7 @@ export function VaultOut({
             <DenomTable
               rows={denoms}
               totalLabel={{ l: "Total", v: fmt(total) }}
-              onChange={setDenom}
+              onChange={posted ? undefined : setDenom}
             />
           </div>
         </div>

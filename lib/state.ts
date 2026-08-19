@@ -663,6 +663,19 @@ function reverseTx(state: SessionState, ref: string): SessionState {
 function transferToVault(state: SessionState): SessionState {
   const amount = parseAmount(state.tx.amount || "0");
   const total = denomTotal(state.tx.denominations);
+  if (amount <= 0) {
+    return {
+      ...state,
+      dialog: {
+        kind: "err",
+        title: "Error",
+        code: "ST-CASH-208",
+        text: "Transfer amount must be greater than zero.",
+        buttons: [{ label: "Ok", primary: true }],
+      },
+    };
+  }
+
   if (total !== amount) {
     return {
       ...state,
