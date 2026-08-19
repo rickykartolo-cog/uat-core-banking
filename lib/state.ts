@@ -68,6 +68,7 @@ export interface SessionState {
   currentStep: number;
   viewFnId: string;
   currentUser: string;
+  signedOnUser: string;
   loggedIn: boolean;
   tillOpen: boolean;
   tillBalance: number;
@@ -109,6 +110,35 @@ export const DEFAULT_DENOMS: Record<string, Denom[]> = {
   ],
 };
 
+const TILL_REQUIRED_FNS = ["1401", "1001", "9008"];
+
+export function requiresOpenTill(fnId: string | undefined): boolean {
+  return !!fnId && TILL_REQUIRED_FNS.includes(fnId);
+}
+
+export function isTillBlocked(state: SessionState, fnId: string | undefined): boolean {
+  return requiresOpenTill(fnId) && !state.tillOpen;
+}
+
+export function tillClosedDialog(state: SessionState): DialogSpec {
+  return {
+    kind: "err",
+    title: "Error",
+    code: "ST-TILL-002",
+    text: `Till <b>${ENV.till}</b> is not open for user ${state.currentUser} for branch date ${ENV.date}. Buy cash from the vault to open the till.`,
+    buttons: [{ label: "Ok", primary: true }],
+  };
+}
+
+export function resolveDenominations(state: SessionState, fnId = state.tx.fnId): Denom[] {
+  if (state.tx.denominations) return state.tx.denominations;
+  const template = DEFAULT_DENOMS[fnId ?? ""] ?? [];
+  return template.map((d) => ({
+    ...d,
+    units: fnId === "1401" && !state.tx.customer ? 0 : d.units,
+  }));
+}
+
 export function makeRef(product: string, serial: number): string {
   const julian = "26230";
   return `${ENV.branch}${product}${julian}${String(serial).padStart(4, "0")}`;
@@ -130,6 +160,7 @@ export function initialState(): SessionState {
     currentStep: 0,
     viewFnId: "",
     currentUser: ENV.teller,
+    signedOnUser: ENV.teller,
     loggedIn: false,
     tillOpen: false,
     tillBalance: 0,
@@ -187,7 +218,7 @@ export function reducer(state: SessionState, action: Action): SessionState {
       return stepSnapshot({ ...state, currentStep: Math.max(state.currentStep - 1, 0) });
 
     case "LOGIN":
-      return { ...state, currentUser: action.user, loggedIn: true };
+      return { ...state, currentUser: action.user, signedOnUser: action.user, loggedIn: true };
 
     case "OPEN_TILL":
       return { ...state, tillOpen: true };
@@ -225,7 +256,7 @@ export function reducer(state: SessionState, action: Action): SessionState {
     }
 
     case "SET_DENOM": {
-      const denoms = state.tx.denominations ?? [];
+      const denoms = resolveDenominations(state, state.tx.fnId ?? state.viewFnId);
       const updated = denoms.map((d) =>
         d.code === action.code ? { ...d, units: parseInt(action.units || "0", 10) || 0 } : d
       );
@@ -269,7 +300,10 @@ export function reducer(state: SessionState, action: Action): SessionState {
 
     case "LAUNCH_FUNCTION": {
       const step = FN_TO_STEP[action.fnId] ?? 0;
-      return stepSnapshot({ ...state, currentStep: step });
+      const next = stepSnapshot({ ...state, currentStep: step });
+      return isTillBlocked(next, action.fnId)
+        ? { ...next, dialog: tillClosedDialog(next) }
+        : next;
     }
 
     case "PLACEHOLDER":
@@ -288,7 +322,11 @@ export function reducer(state: SessionState, action: Action): SessionState {
 
 function stepSnapshot(state: SessionState): SessionState {
   const step = state.currentStep;
-  const snapshot: Partial<SessionState> = { dialog: null, message: null };
+  const snapshot: Partial<SessionState> = {
+    dialog: null,
+    message: null,
+    currentUser: state.signedOnUser,
+  };
   const tx: CurrentTx = {};
 
   if (step === 0) {
@@ -404,8 +442,28 @@ function denomTotal(denoms: Denom[] | undefined): number {
   return (denoms ?? []).reduce((sum, d) => sum + d.value * d.units, 0);
 }
 
+function denomMismatchDialog(total: number, amount: number): DialogSpec {
+  return {
+    kind: "err",
+    title: "Error",
+    code: "ST-DENM-001",
+    text: `Denomination total ${ENV.ccy} ${fmt(total)} does not match transaction amount ${ENV.ccy} ${fmt(amount)}.`,
+    buttons: [{ label: "Ok", primary: true }],
+  };
+}
+
 function saveDeposit(state: SessionState): SessionState {
   const amount = parseAmount(state.tx.amount || "0");
+  const denoms = resolveDenominations(state, "1401");
+  if (isTillBlocked(state, "1401")) {
+    return { ...state, dialog: tillClosedDialog(state) };
+  }
+
+  const total = denomTotal(denoms);
+  if (Math.round(total * 100) !== Math.round(amount * 100)) {
+    return { ...state, dialog: denomMismatchDialog(total, amount) };
+  }
+
   if (amount > ENV.tellerLimit) {
     return {
       ...state,
@@ -423,6 +481,7 @@ function saveDeposit(state: SessionState): SessionState {
 
 function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionState {
   const amount = parseAmount(state.tx.amount || "0");
+  const denoms = resolveDenominations(state, "1401");
   const charge = state.tx.charge ?? 2.18;
   const ref = state.tx.ref || makeRef("CHDP", state.nextSerial);
   const customer = state.tx.customer!;
@@ -441,7 +500,7 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
     checker: unauthorized ? "" : "Auto",
     authorized: !unauthorized,
     status: unauthorized ? "unauthorized" : "complete",
-    denominations: state.tx.denominations ?? [],
+    denominations: denoms,
     mod: 1,
   };
 
@@ -455,7 +514,7 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
     transactions: [...state.transactions, tx],
     customers: newCustomers,
     tillBalance: unauthorized ? state.tillBalance : state.tillBalance + amount,
-    tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "add"),
+    tillDenoms: updateTillDenoms(state.tillDenoms, denoms, "add"),
     nextSerial: state.nextSerial + 1,
     dialog: null,
     message: unauthorized
@@ -468,6 +527,9 @@ function authorizeTx(state: SessionState, ref: string): SessionState {
   const txIndex = state.transactions.findIndex((t) => t.ref === ref);
   if (txIndex < 0) return state;
   const tx = state.transactions[txIndex];
+  if (isTillBlocked(state, tx.fnId)) {
+    return { ...state, dialog: tillClosedDialog(state) };
+  }
   const customer = state.customers[tx.account];
   const newAvail = customer.avail + tx.amount - tx.charge;
   const newCustomers = { ...state.customers, [tx.account]: { ...customer, bal: newAvail, avail: newAvail } };
@@ -493,7 +555,11 @@ function rejectTx(state: SessionState, ref: string): SessionState {
 }
 
 function saveWithdrawal(state: SessionState): SessionState {
+  if (isTillBlocked(state, "1001")) {
+    return { ...state, dialog: tillClosedDialog(state) };
+  }
   const amount = parseAmount(state.tx.amount || "0");
+  const denoms = resolveDenominations(state, "1001");
   const customer = state.tx.customer!;
   const charge = state.tx.charge ?? 1.0;
   const required = amount + charge;
@@ -510,21 +576,12 @@ function saveWithdrawal(state: SessionState): SessionState {
     };
   }
 
-  const totalDenom = denomTotal(state.tx.denominations);
-  if (totalDenom !== amount) {
-    return {
-      ...state,
-      dialog: {
-        kind: "err",
-        title: "Error",
-        code: "ST-DENM-001",
-        text: `Denomination total ${ENV.ccy} ${fmt(totalDenom)} does not match transaction amount ${ENV.ccy} ${fmt(amount)}.`,
-        buttons: [{ label: "Ok", primary: true }],
-      },
-    };
+  const totalDenom = denomTotal(denoms);
+  if (Math.round(totalDenom * 100) !== Math.round(amount * 100)) {
+    return { ...state, dialog: denomMismatchDialog(totalDenom, amount) };
   }
 
-  for (const d of state.tx.denominations ?? []) {
+  for (const d of denoms) {
     if ((state.tillDenoms[d.code] ?? 0) < d.units) {
       return {
         ...state,
@@ -554,7 +611,7 @@ function saveWithdrawal(state: SessionState): SessionState {
     checker: "Auto",
     authorized: true,
     status: "complete",
-    denominations: state.tx.denominations ?? [],
+    denominations: denoms,
     mod: 1,
   };
 
@@ -566,7 +623,7 @@ function saveWithdrawal(state: SessionState): SessionState {
     transactions: [...state.transactions, tx],
     customers: newCustomers,
     tillBalance: state.tillBalance - amount,
-    tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "remove"),
+    tillDenoms: updateTillDenoms(state.tillDenoms, denoms, "remove"),
     nextSerial: state.nextSerial + 1,
     message: { kind: "ok", text: `Transaction ${ref} saved and auto-authorized. Cash paid ${ENV.ccy} ${fmt(amount)}. Account balance ${ENV.ccy} ${fmt(newAvail)}. Till cash position ${ENV.ccy} ${fmt(state.tillBalance - amount)}.` },
   };
@@ -587,6 +644,9 @@ function reverseTx(state: SessionState, ref: string): SessionState {
     };
   }
   const tx = state.transactions[txIndex];
+  if (isTillBlocked(state, tx.fnId)) {
+    return { ...state, dialog: tillClosedDialog(state) };
+  }
   const customer = state.customers[tx.account];
   const newAvail = tx.fnId === "1001" ? customer.avail + tx.amount + tx.charge : customer.avail - tx.amount + tx.charge;
   const newCustomers = { ...state.customers, [tx.account]: { ...customer, bal: newAvail, avail: newAvail } };
@@ -605,22 +665,17 @@ function reverseTx(state: SessionState, ref: string): SessionState {
 }
 
 function transferToVault(state: SessionState): SessionState {
+  if (isTillBlocked(state, "9008")) {
+    return { ...state, dialog: tillClosedDialog(state) };
+  }
   const amount = parseAmount(state.tx.amount || "0");
-  const total = denomTotal(state.tx.denominations);
-  if (total !== amount) {
-    return {
-      ...state,
-      dialog: {
-        kind: "err",
-        title: "Error",
-        code: "ST-DENM-001",
-        text: `Denomination total ${ENV.ccy} ${fmt(total)} does not match transaction amount ${ENV.ccy} ${fmt(amount)}.`,
-        buttons: [{ label: "Ok", primary: true }],
-      },
-    };
+  const denoms = resolveDenominations(state, "9008");
+  const total = denomTotal(denoms);
+  if (Math.round(total * 100) !== Math.round(amount * 100)) {
+    return { ...state, dialog: denomMismatchDialog(total, amount) };
   }
 
-  for (const d of state.tx.denominations ?? []) {
+  for (const d of denoms) {
     if ((state.tillDenoms[d.code] ?? 0) < d.units) {
       return {
         ...state,
@@ -648,7 +703,7 @@ function transferToVault(state: SessionState): SessionState {
     checker: ENV.supervisor,
     authorized: true,
     status: "complete",
-    denominations: state.tx.denominations ?? [],
+    denominations: denoms,
     mod: 1,
   };
 
@@ -656,7 +711,7 @@ function transferToVault(state: SessionState): SessionState {
     ...state,
     transactions: [...state.transactions, tx],
     tillBalance: state.tillBalance - amount,
-    tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "remove"),
+    tillDenoms: updateTillDenoms(state.tillDenoms, denoms, "remove"),
     vaultBalance: state.vaultBalance + amount,
     nextSerial: state.nextSerial + 1,
     message: { kind: "ok", text: `Transfer ${ref} authorized. Excess cash ${ENV.ccy} ${fmt(amount)} moved to vault.` },
