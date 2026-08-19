@@ -62,6 +62,7 @@ export interface CurrentTx {
   vault?: string;
   till?: string;
   branch?: string;
+  mode?: "authorize";
 }
 
 export interface SessionState {
@@ -189,6 +190,7 @@ export type Action =
   | { type: "SET_AMOUNT"; amount: string }
   | { type: "SET_DENOM"; code: string; units: string }
   | { type: "SAVE_DEPOSIT" }
+  | { type: "OPEN_AUTHORIZE"; ref: string }
   | { type: "AUTHORIZE_TX"; ref: string }
   | { type: "REJECT_TX"; ref: string }
   | { type: "SAVE_WITHDRAWAL" }
@@ -202,6 +204,9 @@ export type Action =
   | { type: "PLACEHOLDER"; message: string }
   | { type: "OPEN_LOV"; field: string; title: string }
   | { type: "CLOSE_LOV" };
+
+// Teller-facing functions: the signed-on user acts as maker on these screens.
+const MAKER_FUNCTIONS = new Set(["1401", "1001", "9007", "9008"]);
 
 export function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
@@ -265,6 +270,9 @@ export function reducer(state: SessionState, action: Action): SessionState {
 
     case "SAVE_DEPOSIT":
       return saveDeposit(state);
+
+    case "OPEN_AUTHORIZE":
+      return openAuthorize(state, action.ref);
 
     case "AUTHORIZE_TX":
       return authorizeTx(state, action.ref);
@@ -369,6 +377,8 @@ function stepSnapshot(state: SessionState): SessionState {
     }
   }
 
+  // Steps 14-16 are the authorization phase; step 17 launches the withdrawal, which the
+  // teller keys, so the supervisor context must not extend into it.
   if (step >= 14 && step <= 16) {
     snapshot.currentUser = ENV.supervisor;
   } else if (step !== 28 && step !== 29) {
@@ -437,6 +447,11 @@ function stepSnapshot(state: SessionState): SessionState {
   }
 
   const viewFnId = STEP_TO_FN[step] ?? state.viewFnId;
+  // Any route onto a teller function restores the teller context unless the step is one
+  // of the checker/branch-manager phases above, so maker and checker stay distinct.
+  if (snapshot.currentUser === undefined && MAKER_FUNCTIONS.has(viewFnId)) {
+    snapshot.currentUser = ENV.teller;
+  }
   return { ...state, ...snapshot, tx, viewFnId };
 }
 
@@ -525,12 +540,72 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
   };
 }
 
+// Opens a queued record in authorize mode on its own function screen. The record is
+// resolved by its own reference so the checker always sees the row they selected.
+function openAuthorize(state: SessionState, ref: string): SessionState {
+  const record = state.transactions.find((t) => t.ref === ref);
+  if (!record) {
+    return {
+      ...state,
+      message: { kind: "err", text: `Transaction ${ref} is not available for authorization.` },
+    };
+  }
+  return {
+    ...state,
+    viewFnId: record.fnId,
+    dialog: null,
+    message: null,
+    tx: {
+      mode: "authorize",
+      fnId: record.fnId,
+      product: record.product,
+      account: record.account,
+      customer: state.customers[record.account],
+      amount: fmt(record.amount),
+      accAmount: fmt(record.amount),
+      charge: record.charge,
+      ccy: record.ccy,
+      rate: "1.0000",
+      denominations: structuredClone(record.denominations),
+      ref: record.ref,
+      tab: "Denomination",
+      fetched: true,
+      maker: record.maker,
+      checker: record.checker,
+      authorized: record.authorized,
+    },
+  };
+}
+
 function authorizeTx(state: SessionState, ref: string): SessionState {
   const txIndex = state.transactions.findIndex((t) => t.ref === ref);
-  if (txIndex < 0) return state;
+  if (txIndex < 0) {
+    return {
+      ...state,
+      message: { kind: "err", text: `Transaction ${ref} is not available for authorization.` },
+    };
+  }
   const tx = state.transactions[txIndex];
   if (isTillBlocked(state, tx.fnId)) {
     return { ...state, dialog: tillClosedDialog(state) };
+  }
+  if (tx.authorized || tx.status !== "unauthorized") {
+    return {
+      ...state,
+      message: {
+        kind: "err",
+        text: `Transaction ${ref} is already authorized. Accounting entries have already been posted and cannot be posted again.`,
+      },
+    };
+  }
+  if (tx.maker === state.currentUser) {
+    return {
+      ...state,
+      message: {
+        kind: "err",
+        text: `Maker and checker cannot be the same user. Transaction ${ref} was input by ${tx.maker} and must be authorized by another user.`,
+      },
+    };
   }
   const customer = state.customers[tx.account];
   const newAvail = customer.avail + tx.amount - tx.charge;
@@ -542,6 +617,13 @@ function authorizeTx(state: SessionState, ref: string): SessionState {
     ...state,
     transactions: newTransactions,
     customers: newCustomers,
+    tx: {
+      ...state.tx,
+      ref,
+      customer: newCustomers[tx.account],
+      checker: state.currentUser,
+      authorized: true,
+    },
     tillBalance: state.tillBalance + tx.amount,
     tillDenoms: updateTillDenoms(state.tillDenoms, tx.denominations, "add"),
     message: { kind: "ok", text: `Transaction ${ref} authorized. Account balance updated to ${ENV.ccy} ${fmt(newAvail)}. Till cash position: ${ENV.ccy} ${fmt(state.tillBalance + tx.amount)}.` },
@@ -550,10 +632,31 @@ function authorizeTx(state: SessionState, ref: string): SessionState {
 
 function rejectTx(state: SessionState, ref: string): SessionState {
   const txIndex = state.transactions.findIndex((t) => t.ref === ref);
-  if (txIndex < 0) return state;
+  if (txIndex < 0) {
+    return {
+      ...state,
+      message: { kind: "err", text: `Transaction ${ref} is not available for authorization.` },
+    };
+  }
+  const target = state.transactions[txIndex];
+  if (target.authorized || target.status !== "unauthorized") {
+    return {
+      ...state,
+      message: {
+        kind: "err",
+        text: `Transaction ${ref} is already authorized and cannot be rejected. Use transaction reversal instead.`,
+      },
+    };
+  }
   const newTransactions = [...state.transactions];
   newTransactions.splice(txIndex, 1);
-  return { ...state, transactions: newTransactions, message: { kind: "warn", text: `Transaction ${ref} rejected and removed from queue.` } };
+  return {
+    ...state,
+    transactions: newTransactions,
+    viewFnId: "Pending authorization",
+    tx: {},
+    message: { kind: "warn", text: `Transaction ${ref} rejected and removed from queue.` },
+  };
 }
 
 function saveWithdrawal(state: SessionState): SessionState {
