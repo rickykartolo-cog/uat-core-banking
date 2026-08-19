@@ -178,7 +178,7 @@ export function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
     case "APPLY": {
       const next = { ...state, ...action.partial };
-      if (action.partial.tillOpen === true) {
+      if (action.partial.tillOpen === true || action.partial.transactions !== undefined) {
         next.eotiMarked = false;
       }
       return next;
