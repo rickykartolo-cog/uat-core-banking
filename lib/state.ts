@@ -90,6 +90,7 @@ export interface SessionState {
   lov: { field: string; title: string } | null;
   flags: Record<string, unknown>;
   nextSerial: number;
+  eotiMarked: boolean;
 }
 
 export const DEFAULT_DENOMS: Record<string, Denom[]> = {
@@ -258,6 +259,7 @@ export function initialState(): SessionState {
     lov: null,
     flags: {},
     nextSerial: 1,
+    eotiMarked: false,
   });
 }
 
@@ -293,8 +295,13 @@ const MAKER_FUNCTIONS = new Set(["1401", "1001", "9007", "9008"]);
 
 export function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
-    case "APPLY":
-      return { ...state, ...action.partial };
+    case "APPLY": {
+      const next = { ...state, ...action.partial };
+      if (action.partial.tillOpen === true || action.partial.transactions !== undefined) {
+        next.eotiMarked = false;
+      }
+      return next;
+    }
 
     case "GO":
       return stepSnapshot({ ...state, currentStep: action.step });
@@ -309,7 +316,7 @@ export function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, currentUser: action.user, signedOnUser: action.user, loggedIn: true };
 
     case "OPEN_TILL":
-      return { ...state, tillOpen: true };
+      return { ...state, tillOpen: true, eotiMarked: false };
 
     case "CLOSE_TILL":
       return { ...state, tillOpen: false };
@@ -428,6 +435,7 @@ function stepSnapshot(state: SessionState): SessionState {
 
   if (step === 0) {
     snapshot.loggedIn = false;
+    snapshot.eotiMarked = false;
   }
 
   if (step >= 3 && step <= 5) {
@@ -529,6 +537,9 @@ function stepSnapshot(state: SessionState): SessionState {
 
   if (step === 29) {
     snapshot.currentUser = "BRMGR_01";
+    if (state.eotiMarked) {
+      snapshot.message = state.message;
+    }
   }
 
   const viewFnId = STEP_TO_FN[step] ?? state.viewFnId;
@@ -642,6 +653,7 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
     tillBalance: unauthorized ? state.tillBalance : state.tillBalance + amount,
     tillDenoms: unauthorized ? state.tillDenoms : updateTillDenoms(state.tillDenoms, denoms, "add"),
     nextSerial: state.nextSerial + 1,
+    eotiMarked: false,
     dialog: null,
     message: unauthorized
       ? { kind: "warn", text: `Transaction ${ref} saved. Status: unauthorized — pending supervisor authorization. Customer balance not yet updated.` }
@@ -864,6 +876,7 @@ function saveWithdrawal(state: SessionState): SessionState {
     tillBalance: state.tillBalance - amount,
     tillDenoms: updateTillDenoms(state.tillDenoms, denoms, "remove"),
     nextSerial: state.nextSerial + 1,
+    eotiMarked: false,
     message: { kind: "ok", text: `Transaction ${ref} saved and auto-authorized. Cash paid ${ENV.ccy} ${fmt(amount)}. Account balance ${ENV.ccy} ${fmt(newBal)}. Till cash position ${ENV.ccy} ${fmt(state.tillBalance - amount)}.` },
   };
 }
@@ -974,6 +987,7 @@ function reverseTx(state: SessionState, ref: string): SessionState {
     tillBalance: state.tillBalance + tillChange,
     tillDenoms: updateTillDenoms(state.tillDenoms, tx.denominations, tx.fnId === "1001" ? "add" : "remove"),
     dialog: null,
+    eotiMarked: false,
     message: {
       kind: "ok",
       text: `Transaction ${ref} reversed. Contra entries posted. Account balance restored to ${ENV.ccy} ${fmt(newAvail)}. Till cash position restored to ${ENV.ccy} ${fmt(state.tillBalance + tillChange)}.`,
@@ -1046,6 +1060,7 @@ function transferToVault(state: SessionState): SessionState {
     tillDenoms: updateTillDenoms(state.tillDenoms, denoms, "remove"),
     vaultBalance: state.vaultBalance + amount,
     nextSerial: state.nextSerial + 1,
+    eotiMarked: false,
     message: { kind: "ok", text: `Transfer ${ref} authorized. Excess cash ${ENV.ccy} ${fmt(amount)} moved to vault.` },
   };
 }
@@ -1054,16 +1069,24 @@ function markEoti(state: SessionState): SessionState {
   const openTills = state.tillOpen ? 1 : 0;
   const unauth = state.transactions.filter((t) => t.status === "unauthorized").length;
   if (openTills > 0 || unauth > 0) {
+    const blockers: string[] = [];
+    if (openTills > 0) {
+      blockers.push(`${openTills} till${openTills === 1 ? "" : "s"} still open (${ENV.till})`);
+    }
+    if (unauth > 0) {
+      blockers.push(`${unauth} unauthorized record${unauth === 1 ? "" : "s"} exist${unauth === 1 ? "s" : ""} in branch ${ENV.branch}`);
+    }
     return {
       ...state,
       message: {
         kind: "err",
-        text: `Cannot mark EOTI. ${openTills} till still open (${ENV.till}) and ${unauth} unauthorized records exist in branch ${ENV.branch}. Resolve all exceptions before proceeding.`,
+        text: `Cannot mark EOTI. ${blockers.join(" and ")}. Resolve all exceptions before proceeding.`,
       },
     };
   }
   return {
     ...state,
+    eotiMarked: true,
     message: { kind: "ok", text: `Branch ${ENV.branch} marked EOTI at 18:12. Online transaction input is now closed. EOD batch queued: interest accrual, GL proofing, statements, CTR extract, teller totals archive.` },
   };
 }
