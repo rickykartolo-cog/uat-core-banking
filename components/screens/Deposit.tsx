@@ -94,8 +94,9 @@ export function Deposit({
       denominations: denoms,
       mod: 1,
       misGroup: tx.misGroup ?? DEPOSIT_UDF_DEFAULTS.misGroup,
-      udfSource: tx.udfSource ?? DEPOSIT_UDF_DEFAULTS.udfSource,
+      udfSource: (tx.udfSource ?? DEPOSIT_UDF_DEFAULTS.udfSource).trim(),
       udfPurpose: tx.udfPurpose ?? DEPOSIT_UDF_DEFAULTS.udfPurpose,
+      instrumentCode: tx.instrumentCode,
     };
 
     dispatch({
@@ -187,17 +188,18 @@ export function Deposit({
   const misGroup = (isAuth && existingTx ? existingTx.misGroup : tx.misGroup) ?? DEPOSIT_UDF_DEFAULTS.misGroup;
   const udfSource = (isAuth && existingTx ? existingTx.udfSource : tx.udfSource) ?? DEPOSIT_UDF_DEFAULTS.udfSource;
   const udfPurpose = (isAuth && existingTx ? existingTx.udfPurpose : tx.udfPurpose) ?? DEPOSIT_UDF_DEFAULTS.udfPurpose;
+  const instrumentCode = (isAuth && existingTx ? existingTx.instrumentCode : tx.instrumentCode) ?? "";
 
   const misTab = (
     <div className="grid2">
       <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} onChange={isAuth ? undefined : setNarrative} readOnly={isAuth} />
-      <Field label="Instrument code" value={tx.instrumentCode ?? ""} onChange={isAuth ? undefined : setTxField("instrumentCode")} readOnly={isAuth} />
+      <Field label="Instrument code" value={instrumentCode} onChange={isAuth ? undefined : setTxField("instrumentCode")} readOnly={isAuth} />
       <Field
         label="MIS group"
         value={misGroup}
         readOnly={isAuth}
         onChange={isAuth ? undefined : setTxField("misGroup")}
-        lov
+        lov={!isAuth}
         onLov={isAuth ? undefined : () => openLov("misGroup", "Select MIS group")}
       />
       <Field label="Cost centre" value="BR000-TELLER" readOnly />
@@ -207,7 +209,7 @@ export function Deposit({
         required
         readOnly={isAuth}
         onChange={isAuth ? undefined : setTxField("udfSource")}
-        lov
+        lov={!isAuth}
         onLov={isAuth ? undefined : () => openLov("udfSource", "Select UDF source")}
       />
       <Field label="UDF — purpose" value={udfPurpose} onChange={isAuth ? undefined : setTxField("udfPurpose")} readOnly={isAuth} />
@@ -378,7 +380,7 @@ export function Deposit({
             <Field label="Exchange rate" value={fetched ? "1.0000" : ""} readOnly number />
             <Field label="Account amount" value={tx.accAmount ?? ""} readOnly number />
             <Field label="Value date" value={ENV.date} readOnly />
-            <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} onChange={setNarrative} />
+            <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} onChange={isAuth ? undefined : setNarrative} readOnly={isAuth} />
           </div>
         </Section>
 

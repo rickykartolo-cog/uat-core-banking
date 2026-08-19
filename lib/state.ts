@@ -23,6 +23,7 @@ export interface Transaction {
   misGroup?: string;
   udfSource?: string;
   udfPurpose?: string;
+  instrumentCode?: string;
 }
 
 export interface DialogSpec {
@@ -468,8 +469,9 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
     denominations: state.tx.denominations ?? [],
     mod: 1,
     misGroup: state.tx.misGroup ?? DEPOSIT_UDF_DEFAULTS.misGroup,
-    udfSource: state.tx.udfSource ?? DEPOSIT_UDF_DEFAULTS.udfSource,
+    udfSource: (state.tx.udfSource ?? DEPOSIT_UDF_DEFAULTS.udfSource).trim(),
     udfPurpose: state.tx.udfPurpose ?? DEPOSIT_UDF_DEFAULTS.udfPurpose,
+    instrumentCode: state.tx.instrumentCode,
   };
 
   if (!unauthorized) {
