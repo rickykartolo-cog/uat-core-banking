@@ -5,6 +5,7 @@ import {
   SessionState,
   Action,
   Transaction,
+  DEPOSIT_UDF_DEFAULTS,
   fmt,
   parseAmount,
   makeRef,
@@ -94,6 +95,10 @@ export function Deposit({
       status: "unauthorized",
       denominations: denoms,
       mod: 1,
+      misGroup: tx.misGroup ?? DEPOSIT_UDF_DEFAULTS.misGroup,
+      udfSource: (tx.udfSource ?? DEPOSIT_UDF_DEFAULTS.udfSource).trim(),
+      udfPurpose: tx.udfPurpose ?? DEPOSIT_UDF_DEFAULTS.udfPurpose,
+      instrumentCode: tx.instrumentCode,
     };
 
     dispatch({
@@ -102,7 +107,7 @@ export function Deposit({
         dialog: null,
         currentStep: 13,
         transactions: [...state.transactions, newTx],
-        tx: { ...tx, ref: newRef, amount: amountStr, charge },
+        tx: { ...tx, ref: newRef, amount: amountStr, charge, misGroup: newTx.misGroup, udfSource: newTx.udfSource, udfPurpose: newTx.udfPurpose, instrumentCode: newTx.instrumentCode },
         nextSerial: state.nextSerial + 1,
         message: {
           kind: "warn",
@@ -175,28 +180,47 @@ export function Deposit({
     </table>
   );
 
+  const setTxField = (key: "misGroup" | "udfSource" | "udfPurpose" | "instrumentCode") => (v: string) =>
+    dispatch({ type: "APPLY", partial: { tx: { ...tx, [key]: v } } });
+
+  const misGroup = (isAuth ? existingTx?.misGroup : tx.misGroup) ?? DEPOSIT_UDF_DEFAULTS.misGroup;
+  const udfSource = (isAuth ? existingTx?.udfSource : tx.udfSource) ?? DEPOSIT_UDF_DEFAULTS.udfSource;
+  const udfPurpose = (isAuth ? existingTx?.udfPurpose : tx.udfPurpose) ?? DEPOSIT_UDF_DEFAULTS.udfPurpose;
+  const instrumentCode = (isAuth ? existingTx?.instrumentCode : tx.instrumentCode) ?? "";
+
   const misTab = (
     <div className="grid2">
       <Field
         label="Narrative"
         value={tx.narrative || "CASH DEPOSIT — COUNTER"}
-        onChange={blocked ? undefined : setNarrative}
+        onChange={isAuth || blocked ? undefined : setNarrative}
+        readOnly={isAuth}
       />
-      <Field label="Instrument code" value="" />
+      <Field
+        label="Instrument code"
+        value={instrumentCode}
+        onChange={isAuth || blocked ? undefined : setTxField("instrumentCode")}
+        readOnly={isAuth}
+      />
       <Field
         label="MIS group"
-        value={tx.misGroup ?? "RETAIL"}
-        lov
-        onLov={blocked ? undefined : () => openLov("misGroup", "Select MIS group")}
+        value={misGroup}
+        readOnly={isAuth}
+        onChange={isAuth || blocked ? undefined : setTxField("misGroup")}
+        lov={!isAuth}
+        onLov={isAuth || blocked ? undefined : () => openLov("misGroup", "Select MIS group")}
       />
       <Field label="Cost centre" value="BR000-TELLER" readOnly />
       <Field
         label="UDF — source"
-        value={tx.udfSource ?? "BRANCH"}
-        lov
-        onLov={blocked ? undefined : () => openLov("udfSource", "Select UDF source")}
+        value={udfSource}
+        required
+        readOnly={isAuth}
+        onChange={isAuth || blocked ? undefined : setTxField("udfSource")}
+        lov={!isAuth}
+        onLov={isAuth || blocked ? undefined : () => openLov("udfSource", "Select UDF source")}
       />
-      <Field label="UDF — purpose" value="SALARY PROCEEDS" />
+      <Field label="UDF — purpose" value={udfPurpose} onChange={isAuth ? undefined : setTxField("udfPurpose")} readOnly={isAuth} />
     </div>
   );
 
@@ -367,7 +391,8 @@ export function Deposit({
             <Field
               label="Narrative"
               value={tx.narrative || "CASH DEPOSIT — COUNTER"}
-              onChange={blocked ? undefined : setNarrative}
+              onChange={isAuth || blocked ? undefined : setNarrative}
+              readOnly={isAuth}
             />
           </div>
         </Section>
@@ -376,7 +401,7 @@ export function Deposit({
           <Tabs
             tabs={["Denomination", "Charge", "MIS / UDF"]}
             active={tab}
-            onSelect={isAuth ? undefined : setTab}
+            onSelect={setTab}
           />
           <div className="tabwrap">{tabBody}</div>
         </div>
