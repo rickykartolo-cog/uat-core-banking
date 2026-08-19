@@ -29,7 +29,7 @@ export function Eod({
   const tillsOpen = state.tillOpen ? 1 : 0;
   const unauth = state.transactions.filter((t) => t.status === "unauthorized").length;
   const canEoti = tillsOpen === 0 && unauth === 0;
-  const stage = state.eotiMarked ? "EOTI — End of transaction input" : "TI — Transaction input";
+  const stage = state.eotiMarked && canEoti ? "EOTI — End of transaction input" : "TI — Transaction input";
 
   return (
     <FCShell state={state} dispatch={dispatch} current="eod">
