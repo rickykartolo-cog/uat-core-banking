@@ -277,13 +277,7 @@ export function reducer(state: SessionState, action: Action): SessionState {
 
     case "LAUNCH_FUNCTION": {
       const step = FN_TO_STEP[action.fnId] ?? 0;
-      const snapshot = stepSnapshot({ ...state, currentStep: step });
-      // Teller functions are keyed by the maker, so launching one restores the teller
-      // context. Without this the supervisor context set by the authorization queue
-      // sticks and records entered afterwards could never be authorized.
-      return MAKER_FUNCTIONS.has(action.fnId)
-        ? { ...snapshot, currentUser: ENV.teller }
-        : snapshot;
+      return stepSnapshot({ ...state, currentStep: step });
     }
 
     case "PLACEHOLDER":
@@ -411,6 +405,11 @@ function stepSnapshot(state: SessionState): SessionState {
   }
 
   const viewFnId = STEP_TO_FN[step] ?? state.viewFnId;
+  // Any route onto a teller function restores the teller context unless the step is one
+  // of the checker/branch-manager phases above, so maker and checker stay distinct.
+  if (snapshot.currentUser === undefined && MAKER_FUNCTIONS.has(viewFnId)) {
+    snapshot.currentUser = ENV.teller;
+  }
   return { ...state, ...snapshot, tx, viewFnId };
 }
 
@@ -552,7 +551,13 @@ function authorizeTx(state: SessionState, ref: string): SessionState {
     ...state,
     transactions: newTransactions,
     customers: newCustomers,
-    tx: { ...state.tx, ref, checker: state.currentUser, authorized: true },
+    tx: {
+      ...state.tx,
+      ref,
+      customer: newCustomers[tx.account],
+      checker: state.currentUser,
+      authorized: true,
+    },
     tillBalance: state.tillBalance + tx.amount,
     tillDenoms: updateTillDenoms(state.tillDenoms, tx.denominations, "add"),
     message: { kind: "ok", text: `Transaction ${ref} authorized. Account balance updated to ${ENV.ccy} ${fmt(newAvail)}. Till cash position: ${ENV.ccy} ${fmt(state.tillBalance + tx.amount)}.` },

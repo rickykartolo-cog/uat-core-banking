@@ -81,10 +81,12 @@ export function VaultIn({
       return;
     }
 
-    openTill();
+    openTill(false);
   };
 
-  const openTill = () => {
+  // `viaOverride` records who actually authorized: within the retention limit the
+  // transaction is auto-authorized by the maker, so no supervisor is stamped.
+  const openTill = (viaOverride: boolean) => {
     const tillDenoms: Record<string, number> = {};
     for (const d of denoms) {
       tillDenoms[d.code] = (tillDenoms[d.code] ?? 0) + d.units;
@@ -106,7 +108,7 @@ export function VaultIn({
           ref,
           amount: amountStr,
           denominations: structuredClone(denoms),
-          checker: ENV.supervisor,
+          checker: viaOverride ? ENV.supervisor : ENV.teller,
         },
         message: {
           kind: "ok",
@@ -118,7 +120,7 @@ export function VaultIn({
 
   const handleDialog = (action?: string) => {
     if (action === "CONFIRM_VAULT_OVERRIDE") {
-      openTill();
+      openTill(true);
     } else {
       dispatch({ type: "CLOSE_DIALOG" });
     }
