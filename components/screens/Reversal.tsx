@@ -1,7 +1,7 @@
 "use client";
 
-import { ENV, CUSTOMERS } from "@/lib/config";
-import { SessionState, Action, fmt } from "@/lib/state";
+import { ENV } from "@/lib/config";
+import { SessionState, Action, fmt, txDate } from "@/lib/state";
 import {
   FCShell,
   Win,
@@ -20,12 +20,33 @@ export function Reversal({
   dispatch: React.Dispatch<Action>;
 }) {
   const tx = state.tx;
-  const ref = tx.ref ?? "000CHWL262300012";
+  const sameDayTransactions = state.transactions.filter((record) => txDate(record) === ENV.date);
+  const eligibleTransactions = sameDayTransactions.filter(
+    (record) => record.authorized && record.status !== "reversed"
+  );
+  const ref =
+    (tx.ref && state.transactions.some((record) => record.ref === tx.ref) ? tx.ref : undefined) ??
+    eligibleTransactions[0]?.ref ??
+    tx.ref ??
+    "";
   const reason = tx.reversalReason ?? "WRONG DENOMINATION PAID OUT";
 
   const targetTx = state.transactions.find((t) => t.ref === ref);
 
+  const setRef = (value: string) =>
+    dispatch({ type: "APPLY", partial: { tx: { ...tx, ref: value } } });
+
+  const fetch = () => setRef(ref.trim());
+
+  const showRefusal = () => {
+    dispatch({ type: "REVERSE_TX", ref });
+  };
+
   const requestReverse = () => {
+    if (!targetTx || !targetTx.authorized || targetTx.status === "unauthorized" || targetTx.status === "reversed" || txDate(targetTx) !== ENV.date) {
+      showRefusal();
+      return;
+    }
     dispatch({
       type: "APPLY",
       partial: {
@@ -48,6 +69,7 @@ export function Reversal({
   const handleDialog = (action?: string) => {
     if (action === "CONFIRM_REVERSE") {
       dispatch({ type: "REVERSE_TX", ref });
+      return;
     }
     dispatch({ type: "CLOSE_DIALOG" });
   };
@@ -68,7 +90,7 @@ export function Reversal({
         actions={
           <ActionBar
             buttons={[
-              { label: "Fetch", primary: true },
+              { label: "Fetch", primary: true, onClick: fetch },
               { label: "Reverse", onClick: requestReverse },
               { label: "View accounting" },
               { label: "Exit" },
@@ -85,6 +107,7 @@ export function Reversal({
               required
               lov
               focus
+              onChange={setRef}
               onLov={() => openLov("ref", "Select transaction reference")}
             />
             <Field label="Transaction date" value={ENV.date} readOnly />
@@ -105,15 +128,22 @@ export function Reversal({
               </tr>
             </thead>
             <tbody>
-              <tr className="sel">
-                <td>{targetTx?.fnId ?? "1001"}</td>
-                <td>{targetTx?.product ?? "CHWL"}</td>
-                <td>{targetTx?.account ?? CUSTOMERS["000987654321"].acc}</td>
-                <td className="num">{fmt(targetTx?.amount ?? 8000)}</td>
-                <td>{targetTx?.maker ?? ENV.teller}</td>
-                <td>{targetTx?.checker ?? "Auto"}</td>
-                <td>{targetTx?.status ?? "Authorized"}</td>
-              </tr>
+              {sameDayTransactions.map((record) => (
+                <tr
+                  key={record.ref}
+                  className={record.ref === ref ? "sel" : undefined}
+                  onClick={() => setRef(record.ref)}
+                  style={{ cursor: "pointer" }}
+                >
+                  <td>{record.fnId}</td>
+                  <td>{record.product}</td>
+                  <td>{record.account}</td>
+                  <td className="num">{fmt(record.amount)}</td>
+                  <td>{record.maker}</td>
+                  <td>{record.checker}</td>
+                  <td>{record.status === "reversed" ? "Reversed" : record.authorized ? "Authorized" : "Unauthorized"}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
           <div style={{ marginTop: 7 }}>
@@ -121,6 +151,9 @@ export function Reversal({
               label="Reversal reason"
               value={reason}
               required
+              onChange={(value) =>
+                dispatch({ type: "APPLY", partial: { tx: { ...tx, reversalReason: value } } })
+              }
             />
           </div>
         </Section>
