@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
 import { ENV } from "@/lib/config";
-import { SessionState, Action, DEFAULT_DENOMS, fmt } from "@/lib/state";
+import {
+  SessionState,
+  Action,
+  fmt,
+  makeRef,
+  proposeVaultDenoms,
+  tillExcess,
+} from "@/lib/state";
 import {
   FCShell,
   Win,
@@ -24,16 +30,12 @@ export function VaultOut({
   dispatch: React.Dispatch<Action>;
 }) {
   const tx = state.tx;
-  const amountStr = tx.amount ?? "117000.00";
-  const denoms = tx.denominations ?? DEFAULT_DENOMS["9008"];
+  const excess = tillExcess(state);
+  const amountStr = tx.amount ?? fmt(excess).replace(/,/g, "");
+  const denoms = tx.denominations ?? proposeVaultDenoms(state.tillDenoms, excess);
   const total = denoms.reduce((sum, d) => sum + d.value * d.units, 0);
-  const ref = tx.ref ?? "000CHTV262300031";
-
-  useEffect(() => {
-    if (state.currentStep === 26 && !state.dialog && state.message?.kind === "ok") {
-      dispatch({ type: "NEXT" });
-    }
-  }, [dispatch, state.currentStep, state.dialog, state.message]);
+  const ref = tx.ref || makeRef("CHTV", state.nextSerial);
+  const posted = state.transactions.some((t) => t.ref === ref && t.fnId === "9008");
 
   const setAmount = (v: string) => dispatch({ type: "SET_AMOUNT", amount: v });
   const setDenom = (code: string, units: string) =>
@@ -112,7 +114,7 @@ export function VaultOut({
           maker={ENV.teller}
           mkTime={`${ENV.date} 17:41:09`}
           checker={tx.checker}
-          authorized={state.tillBalance === ENV.retention}
+          authorized={posted}
         />
 
         {state.message && <MsgBar kind={state.message.kind} text={state.message.text} />}
