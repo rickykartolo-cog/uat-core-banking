@@ -105,7 +105,7 @@ export function Deposit({
         dialog: null,
         currentStep: 13,
         transactions: [...state.transactions, newTx],
-        tx: { ...tx, ref: newRef, amount: amountStr, charge, udfSource: newTx.udfSource },
+        tx: { ...tx, ref: newRef, amount: amountStr, charge, misGroup: newTx.misGroup, udfSource: newTx.udfSource, udfPurpose: newTx.udfPurpose },
         nextSerial: state.nextSerial + 1,
         message: {
           kind: "warn",
@@ -185,9 +185,9 @@ export function Deposit({
   const setTxField = (key: "misGroup" | "udfSource" | "udfPurpose" | "instrumentCode") => (v: string) =>
     dispatch({ type: "APPLY", partial: { tx: { ...tx, [key]: v } } });
 
-  const misGroup = isAuth ? existingTx?.misGroup ?? "" : tx.misGroup ?? DEPOSIT_UDF_DEFAULTS.misGroup;
-  const udfSource = isAuth ? existingTx?.udfSource ?? "" : tx.udfSource ?? DEPOSIT_UDF_DEFAULTS.udfSource;
-  const udfPurpose = isAuth ? existingTx?.udfPurpose ?? "" : tx.udfPurpose ?? DEPOSIT_UDF_DEFAULTS.udfPurpose;
+  const misGroup = (isAuth ? existingTx?.misGroup : tx.misGroup) ?? DEPOSIT_UDF_DEFAULTS.misGroup;
+  const udfSource = (isAuth ? existingTx?.udfSource : tx.udfSource) ?? DEPOSIT_UDF_DEFAULTS.udfSource;
+  const udfPurpose = (isAuth ? existingTx?.udfPurpose : tx.udfPurpose) ?? DEPOSIT_UDF_DEFAULTS.udfPurpose;
   const instrumentCode = (isAuth ? existingTx?.instrumentCode : tx.instrumentCode) ?? "";
 
   const misTab = (
