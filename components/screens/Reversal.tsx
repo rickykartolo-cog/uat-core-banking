@@ -25,15 +25,16 @@ export function Reversal({
     (record) => isReversible(record, state.customers)
   );
   const ref = tx.ref ?? eligibleTransactions[eligibleTransactions.length - 1]?.ref ?? "";
+  const normalizedRef = ref.trim();
   const reason = tx.reversalReason ?? "WRONG DENOMINATION PAID OUT";
 
-  const targetTx = state.transactions.find((t) => t.ref === ref);
+  const targetTx = state.transactions.find((t) => t.ref === normalizedRef);
 
   const setRef = (value: string) =>
     dispatch({ type: "APPLY", partial: { tx: { ...tx, ref: value } } });
 
   const fetch = () => {
-    const fetchedRef = ref.trim();
+    const fetchedRef = normalizedRef;
     if (!fetchedRef) {
       dispatch({
         type: "APPLY",
@@ -74,7 +75,7 @@ export function Reversal({
   };
 
   const showRefusal = () => {
-    dispatch({ type: "REVERSE_TX", ref });
+    dispatch({ type: "REVERSE_TX", ref: normalizedRef });
   };
 
   const requestReverse = () => {
@@ -89,7 +90,7 @@ export function Reversal({
           kind: "warn",
           title: "Confirm reversal",
           code: "ST-REVR-004",
-          text: `Reversal of ${escapeHtml(ref)} will post contra entries for ${ENV.ccy} ${fmt(
+          text: `Reversal of ${escapeHtml(normalizedRef)} will post contra entries for ${ENV.ccy} ${fmt(
             (targetTx?.amount ?? 0) + (targetTx?.charge ?? 0)
           )} and restore till denominations. Supervisor authorization is required. Proceed?`,
           buttons: [
@@ -103,7 +104,7 @@ export function Reversal({
 
   const handleDialog = (action?: string) => {
     if (action === "CONFIRM_REVERSE") {
-      dispatch({ type: "REVERSE_TX", ref });
+      dispatch({ type: "REVERSE_TX", ref: normalizedRef });
       return;
     }
     dispatch({ type: "CLOSE_DIALOG" });
