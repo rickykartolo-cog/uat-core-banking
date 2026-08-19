@@ -174,6 +174,9 @@ export type Action =
   | { type: "OPEN_LOV"; field: string; title: string }
   | { type: "CLOSE_LOV" };
 
+// Teller-facing functions: the signed-on user acts as maker on these screens.
+const MAKER_FUNCTIONS = new Set(["1401", "1001", "9007", "9008"]);
+
 export function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
     case "APPLY":
@@ -274,7 +277,13 @@ export function reducer(state: SessionState, action: Action): SessionState {
 
     case "LAUNCH_FUNCTION": {
       const step = FN_TO_STEP[action.fnId] ?? 0;
-      return stepSnapshot({ ...state, currentStep: step });
+      const snapshot = stepSnapshot({ ...state, currentStep: step });
+      // Teller functions are keyed by the maker, so launching one restores the teller
+      // context. Without this the supervisor context set by the authorization queue
+      // sticks and records entered afterwards could never be authorized.
+      return MAKER_FUNCTIONS.has(action.fnId)
+        ? { ...snapshot, currentUser: ENV.teller }
+        : snapshot;
     }
 
     case "PLACEHOLDER":

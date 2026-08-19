@@ -35,27 +35,22 @@ export function AuthQueue({
   ];
 
   const [picked, setPicked] = useState<string | null>(null);
-  // The selected row is always identified by its own reference.
+  // The selected row is always identified by its own reference. Only real records are
+  // selectable, so the static prototype row is never acted on.
   const selectedRef =
-    picked && queueRows.some((r) => r.ref === picked) ? picked : pending[0]?.ref;
+    picked && pending.some((t) => t.ref === picked) ? picked : pending[0]?.ref;
 
-  const authorize = () => {
-    if (selectedRef) {
-      dispatch({ type: "AUTHORIZE_TX", ref: selectedRef });
+  const withSelection = (run: (ref: string) => void) => () => {
+    if (!selectedRef) {
+      dispatch({ type: "PLACEHOLDER", message: "Select a record pending authorization first." });
+      return;
     }
+    run(selectedRef);
   };
 
-  const view = () => {
-    if (selectedRef) {
-      dispatch({ type: "OPEN_AUTHORIZE", ref: selectedRef });
-    }
-  };
-
-  const reject = () => {
-    if (selectedRef) {
-      dispatch({ type: "REJECT_TX", ref: selectedRef });
-    }
-  };
+  const authorize = withSelection((ref) => dispatch({ type: "AUTHORIZE_TX", ref }));
+  const view = withSelection((ref) => dispatch({ type: "OPEN_AUTHORIZE", ref }));
+  const reject = withSelection((ref) => dispatch({ type: "REJECT_TX", ref }));
 
   const openLov = (field: string, title: string) =>
     dispatch({ type: "OPEN_LOV", field, title });
@@ -113,7 +108,11 @@ export function AuthQueue({
                 <tr
                   key={row.ref}
                   className={row.ref === selectedRef ? "sel" : undefined}
-                  onClick={() => setPicked(row.ref)}
+                  onClick={
+                    pending.some((t) => t.ref === row.ref)
+                      ? () => setPicked(row.ref)
+                      : undefined
+                  }
                 >
                   <td>{row.fnId}</td>
                   <td>{row.ref}</td>
