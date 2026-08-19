@@ -147,6 +147,55 @@ export function resolveDenominations(state: SessionState, fnId = state.tx.fnId):
   }));
 }
 
+export const DENOM_LADDER: { code: string; value: number }[] = [
+  { code: "1000", value: 1000 },
+  { code: "100", value: 100 },
+  { code: "50", value: 50 },
+  { code: "10", value: 10 },
+  { code: "5", value: 5 },
+];
+
+export interface TillSummary {
+  opening: number;
+  received: number;
+  paid: number;
+  transferred: number;
+  position: number;
+}
+
+export function tillSummary(state: SessionState): TillSummary {
+  const posted = state.transactions.filter((t) => t.status === "complete");
+  const received = posted.filter((t) => t.fnId === "1401").reduce((s, t) => s + t.amount, 0);
+  const paid = posted.filter((t) => t.fnId === "1001").reduce((s, t) => s + t.amount, 0);
+  const transferred = posted.filter((t) => t.fnId === "9008").reduce((s, t) => s + t.amount, 0);
+  const position = state.tillBalance;
+  return { opening: position - received + paid + transferred, received, paid, transferred, position };
+}
+
+export function tillExcess(state: SessionState): number {
+  return Math.max(0, state.tillBalance - ENV.retention);
+}
+
+// Largest-first breakdown of `amount` using only the units the till actually holds.
+export function proposeVaultDenoms(
+  tillDenoms: Record<string, number>,
+  amount: number
+): Denom[] {
+  let left = amount;
+  const rows: Denom[] = [];
+  for (const d of DENOM_LADDER) {
+    const held = tillDenoms[d.code] ?? 0;
+    const units = Math.min(held, Math.floor(left / d.value));
+    left -= units * d.value;
+    if (held > 0 || units > 0) rows.push({ code: d.code, value: d.value, units });
+  }
+  return rows;
+}
+
+export function countedSignature(tillDenoms: Record<string, number>): string {
+  return DENOM_LADDER.map((d) => `${d.code}:${tillDenoms[d.code] ?? 0}`).join("|");
+}
+
 export function makeRef(product: string, serial: number): string {
   const julian = "26230";
   return `${ENV.branch}${product}${julian}${String(serial).padStart(4, "0")}`;
@@ -324,10 +373,16 @@ export function reducer(state: SessionState, action: Action): SessionState {
       return transferToVault(state);
 
     case "UPDATE_COUNTED": {
-      const counted = (state.flags.counted as Record<string, string>) ?? {};
+      const sig = countedSignature(state.tillDenoms);
+      const stale = state.flags.countedSig !== sig;
+      const counted = stale ? {} : ((state.flags.counted as Record<string, string>) ?? {});
       return {
         ...state,
-        flags: { ...state.flags, counted: { ...counted, [action.code]: action.units } },
+        flags: {
+          ...state.flags,
+          counted: { ...counted, [action.code]: action.units },
+          countedSig: sig,
+        },
       };
     }
 
@@ -460,11 +515,12 @@ function stepSnapshot(state: SessionState): SessionState {
   }
 
   if (step === 26) {
+    const excess = tillExcess(state);
     tx.fnId = "9008";
     tx.product = "CHTV";
     tx.ccy = ENV.ccy;
-    tx.amount = "117000.00";
-    tx.denominations = structuredClone(DEFAULT_DENOMS["9008"]);
+    tx.amount = fmt(excess).replace(/,/g, "");
+    tx.denominations = proposeVaultDenoms(state.tillDenoms, excess);
   }
 
   if (step === 28) {
@@ -584,7 +640,7 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
     transactions: [...state.transactions, tx],
     customers: newCustomers,
     tillBalance: unauthorized ? state.tillBalance : state.tillBalance + amount,
-    tillDenoms: updateTillDenoms(state.tillDenoms, denoms, "add"),
+    tillDenoms: unauthorized ? state.tillDenoms : updateTillDenoms(state.tillDenoms, denoms, "add"),
     nextSerial: state.nextSerial + 1,
     dialog: null,
     message: unauthorized
@@ -932,6 +988,19 @@ function transferToVault(state: SessionState): SessionState {
   const amount = parseAmount(state.tx.amount || "0");
   const denoms = resolveDenominations(state, "9008");
   const total = denomTotal(denoms);
+  if (amount <= 0) {
+    return {
+      ...state,
+      dialog: {
+        kind: "err",
+        title: "Error",
+        code: "ST-CASH-208",
+        text: "Transfer amount must be greater than zero.",
+        buttons: [{ label: "Ok", primary: true }],
+      },
+    };
+  }
+
   if (Math.round(total * 100) !== Math.round(amount * 100)) {
     return { ...state, dialog: denomMismatchDialog(total, amount) };
   }
@@ -971,6 +1040,7 @@ function transferToVault(state: SessionState): SessionState {
 
   return {
     ...state,
+    tx: { ...state.tx, ref, checker: ENV.supervisor, authorized: true },
     transactions: [...state.transactions, tx],
     tillBalance: state.tillBalance - amount,
     tillDenoms: updateTillDenoms(state.tillDenoms, denoms, "remove"),

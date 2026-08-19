@@ -1,16 +1,15 @@
 "use client";
 
 import { ENV } from "@/lib/config";
-import { SessionState, Action, fmt } from "@/lib/state";
+import {
+  SessionState,
+  Action,
+  fmt,
+  DENOM_LADDER,
+  countedSignature,
+  tillSummary,
+} from "@/lib/state";
 import { FCShell, Win, Section, Field, ActionBar, MsgBar, Dialog } from "@/components/ui";
-
-const TILL_DENOMS = [
-  { code: "1000", value: 1000 },
-  { code: "100", value: 100 },
-  { code: "50", value: 50 },
-  { code: "10", value: 10 },
-  { code: "5", value: 5 },
-];
 
 export function Till({
   state,
@@ -20,9 +19,15 @@ export function Till({
   dispatch: React.Dispatch<Action>;
 }) {
   const tillDenoms = state.tillDenoms;
-  const counted = (state.flags.counted as Record<string, string>) ?? {};
+  const summary = tillSummary(state);
+  // Counted units are only meaningful for the till position they were keyed against:
+  // any till-affecting posting resets the column so no phantom difference appears.
+  const counted =
+    state.flags.countedSig === countedSignature(tillDenoms)
+      ? ((state.flags.counted as Record<string, string>) ?? {})
+      : {};
 
-  const rows = TILL_DENOMS.map((d) => {
+  const rows = DENOM_LADDER.map((d) => {
     const sysUnits = tillDenoms[d.code] ?? 0;
     const sysAmt = sysUnits * d.value;
     const cntUnitsStr = counted[d.code];
@@ -35,10 +40,6 @@ export function Till({
   const totalSystem = rows.reduce((sum, r) => sum + r.sysAmt, 0);
   const totalCounted = rows.reduce((sum, r) => sum + r.cntAmt, 0);
   const totalDiff = totalCounted - totalSystem;
-
-  const vaultTransfer = state.transactions
-    .filter((t) => t.fnId === "9008" && t.status === "complete")
-    .reduce((sum, t) => sum + t.amount, 0);
 
   const closeTill = () => {
     if (totalDiff !== 0) {
@@ -126,11 +127,11 @@ export function Till({
             <Field label="Till id" value={ENV.till} readOnly />
             <Field label="Till user" value={ENV.teller} readOnly />
             <Field label="Status" value={state.tillOpen ? "Open" : "Closed"} readOnly />
-            <Field label="Opening cash" value={fmt(150000)} readOnly number />
-            <Field label="Cash received (deposits)" value={fmt(25000)} readOnly number />
-            <Field label="Cash paid (withdrawals)" value={fmt(8000)} readOnly number />
-            <Field label="Transferred to vault" value={fmt(vaultTransfer)} readOnly number />
-            <Field label="System cash position" value={fmt(state.tillBalance)} readOnly number />
+            <Field label="Opening cash" value={fmt(summary.opening)} readOnly number />
+            <Field label="Cash received (deposits)" value={fmt(summary.received)} readOnly number />
+            <Field label="Cash paid (withdrawals)" value={fmt(summary.paid)} readOnly number />
+            <Field label="Transferred to vault" value={fmt(summary.transferred)} readOnly number />
+            <Field label="System cash position" value={fmt(summary.position)} readOnly number />
             <Field label="Retention limit" value={fmt(ENV.retention)} readOnly number />
           </div>
         </Section>
