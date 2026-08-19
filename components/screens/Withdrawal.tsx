@@ -55,40 +55,10 @@ export function Withdrawal({
     }
   }, [dispatch, tx]);
 
-  // Default tab per step.
-  let defaultTab = "Denomination";
-  if (state.currentStep === 19) defaultTab = "Charge";
-  if (state.currentStep === 20) defaultTab = "Cheque / verification";
-  const tab = tx.tab || defaultTab;
-
-  useEffect(() => {
-    if (tx.tab !== defaultTab) {
-      dispatch({ type: "APPLY", partial: { tx: { ...tx, tab: defaultTab } } });
-    }
-  }, [dispatch, defaultTab, tx]);
-
-  // Seed default amounts for the demonstration steps.
-  useEffect(() => {
-    if (state.currentStep === 18 && !tx.amount) {
-      dispatch({ type: "SET_AMOUNT", amount: "8500.00" });
-    } else if (state.currentStep >= 19 && state.currentStep <= 22 && !tx.amount) {
-      dispatch({ type: "SET_AMOUNT", amount: "8000.00" });
-    }
-  }, [dispatch, state.currentStep, tx.amount]);
-
-  // Auto-advance to the completed step on a successful save.
-  useEffect(() => {
-    if (
-      state.currentStep === 21 &&
-      !state.dialog &&
-      state.message?.kind === "ok"
-    ) {
-      dispatch({ type: "NEXT" });
-    }
-  }, [dispatch, state.currentStep, state.dialog, state.message]);
+  const tab = tx.tab || "Denomination";
 
   const amountStr = tx.amount ?? "";
-  const denoms = tx.denominations ?? DEFAULT_DENOMS["1001"];
+  const denoms = tx.denominations ?? structuredClone(DEFAULT_DENOMS["1001"]);
   const total = denomTotal(denoms);
   const ref = tx.ref ?? "";
 
@@ -106,24 +76,7 @@ export function Withdrawal({
       partial: { tx: { ...tx, sigOk: !tx.sigOk } },
     });
 
-  const save = () => {
-    if (!tx.sigOk) {
-      dispatch({
-        type: "APPLY",
-        partial: {
-          dialog: {
-            kind: "err",
-            title: "Error",
-            code: "ST-SIGN-001",
-            text: "Signature verification is mandatory before saving a cash withdrawal above the branch threshold.",
-            buttons: [{ label: "Ok", primary: true }],
-          },
-        },
-      });
-      return;
-    }
-    dispatch({ type: "SAVE_WITHDRAWAL" });
-  };
+  const save = () => dispatch({ type: "SAVE_WITHDRAWAL" });
 
   const handleDialog = () => dispatch({ type: "CLOSE_DIALOG" });
 
@@ -186,7 +139,7 @@ export function Withdrawal({
         <DenomTable
           rows={denoms}
           totalLabel={{ l: "Total denomination amount", v: fmt(total) }}
-          onChange={state.currentStep === 22 ? undefined : setDenom}
+          onChange={setDenom}
         />
         <div style={{ marginTop: 6, color: "#555" }}>
           Till {ENV.till} available cash by denomination is validated before the payout is allowed.
@@ -263,7 +216,7 @@ export function Withdrawal({
               required
               number
               focus={state.currentStep === 17 || state.currentStep === 18}
-              onChange={state.currentStep === 22 ? undefined : setAmount}
+              onChange={setAmount}
             />
             <Field label="Exchange rate" value="1.0000" readOnly number />
             <Field label="Account amount" value={tx.accAmount ?? ""} readOnly number />
@@ -276,7 +229,7 @@ export function Withdrawal({
           <Tabs
             tabs={["Denomination", "Charge", "Cheque / verification"]}
             active={tab}
-            onSelect={state.currentStep === 22 ? undefined : setTab}
+            onSelect={setTab}
           />
           <div className="tabwrap">{tabBody}</div>
         </div>

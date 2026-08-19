@@ -225,7 +225,12 @@ export function reducer(state: SessionState, action: Action): SessionState {
     }
 
     case "SET_DENOM": {
-      const denoms = state.tx.denominations ?? [];
+      // Fallback only for the withdrawal grid, which renders the all-zero
+      // 1001 defaults; other functions resolve their own denomination lists.
+      const defaults = state.tx.fnId === "1001" ? DEFAULT_DENOMS["1001"] : undefined;
+      const denoms =
+        state.tx.denominations ?? (defaults ? defaults.map((d) => ({ ...d })) : undefined);
+      if (!denoms) return state;
       const updated = denoms.map((d) =>
         d.code === action.code ? { ...d, units: parseInt(action.units || "0", 10) || 0 } : d
       );
@@ -331,8 +336,10 @@ function stepSnapshot(state: SessionState): SessionState {
     }
   }
 
-  if (step >= 14 && step <= 17) {
+  if (step >= 14 && step <= 16) {
     snapshot.currentUser = ENV.supervisor;
+  } else if (step !== 28 && step !== 29) {
+    snapshot.currentUser = ENV.teller;
   }
 
   if (step >= 17 && step <= 23) {
@@ -493,8 +500,15 @@ function rejectTx(state: SessionState, ref: string): SessionState {
 }
 
 function saveWithdrawal(state: SessionState): SessionState {
+  if (state.tx.ref && state.transactions.some((t) => t.ref === state.tx.ref && t.status !== "reversed")) {
+    return {
+      ...state,
+      message: { kind: "info", text: `Transaction ${state.tx.ref} is already saved and authorized.` },
+    };
+  }
   const amount = parseAmount(state.tx.amount || "0");
-  const customer = state.tx.customer!;
+  const account = state.tx.account ?? state.tx.customer?.acc;
+  const customer = (account ? state.customers[account] : undefined) ?? state.tx.customer!;
   const charge = state.tx.charge ?? 1.0;
   const required = amount + charge;
   if (required > customer.avail) {
@@ -505,6 +519,19 @@ function saveWithdrawal(state: SessionState): SessionState {
         title: "Error",
         code: "ST-ACC-041",
         text: `Insufficient available balance in account ${customer.acc}. Available ${ENV.ccy} ${fmt(customer.avail)}, required ${ENV.ccy} ${fmt(required)} (including charges ${ENV.ccy} ${fmt(charge)}). Withdrawal not allowed without OD / force-debit authorization.`,
+        buttons: [{ label: "Ok", primary: true }],
+      },
+    };
+  }
+
+  if (!state.tx.sigOk) {
+    return {
+      ...state,
+      dialog: {
+        kind: "err",
+        title: "Error",
+        code: "ST-SIGN-001",
+        text: "Signature verification is mandatory before saving a cash withdrawal above the branch threshold.",
         buttons: [{ label: "Ok", primary: true }],
       },
     };
@@ -539,7 +566,11 @@ function saveWithdrawal(state: SessionState): SessionState {
     }
   }
 
-  const ref = state.tx.ref || makeRef("CHWL", state.nextSerial);
+  const ref =
+    state.tx.ref && !state.transactions.some((t) => t.ref === state.tx.ref)
+      ? state.tx.ref
+      : makeRef("CHWL", state.nextSerial);
+  const newBal = customer.bal - required;
   const newAvail = customer.avail - required;
 
   const tx: Transaction = {
@@ -558,17 +589,17 @@ function saveWithdrawal(state: SessionState): SessionState {
     mod: 1,
   };
 
-  const newCustomers = { ...state.customers, [customer.acc]: { ...customer, bal: newAvail, avail: newAvail } };
+  const newCustomers = { ...state.customers, [customer.acc]: { ...customer, bal: newBal, avail: newAvail } };
 
   return {
     ...state,
-    tx: { ...state.tx, ref },
+    tx: { ...state.tx, ref, customer: newCustomers[customer.acc] },
     transactions: [...state.transactions, tx],
     customers: newCustomers,
     tillBalance: state.tillBalance - amount,
     tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "remove"),
     nextSerial: state.nextSerial + 1,
-    message: { kind: "ok", text: `Transaction ${ref} saved and auto-authorized. Cash paid ${ENV.ccy} ${fmt(amount)}. Account balance ${ENV.ccy} ${fmt(newAvail)}. Till cash position ${ENV.ccy} ${fmt(state.tillBalance - amount)}.` },
+    message: { kind: "ok", text: `Transaction ${ref} saved and auto-authorized. Cash paid ${ENV.ccy} ${fmt(amount)}. Account balance ${ENV.ccy} ${fmt(newBal)}. Till cash position ${ENV.ccy} ${fmt(state.tillBalance - amount)}.` },
   };
 }
 
@@ -588,8 +619,10 @@ function reverseTx(state: SessionState, ref: string): SessionState {
   }
   const tx = state.transactions[txIndex];
   const customer = state.customers[tx.account];
-  const newAvail = tx.fnId === "1001" ? customer.avail + tx.amount + tx.charge : customer.avail - tx.amount + tx.charge;
-  const newCustomers = { ...state.customers, [tx.account]: { ...customer, bal: newAvail, avail: newAvail } };
+  const delta = tx.fnId === "1001" ? tx.amount + tx.charge : -tx.amount + tx.charge;
+  const newBal = customer.bal + delta;
+  const newAvail = customer.avail + delta;
+  const newCustomers = { ...state.customers, [tx.account]: { ...customer, bal: newBal, avail: newAvail } };
   const newTransactions = [...state.transactions];
   newTransactions[txIndex] = { ...tx, status: "reversed" };
 
