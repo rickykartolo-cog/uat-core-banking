@@ -479,7 +479,9 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
     transactions: [...state.transactions, tx],
     customers: newCustomers,
     tillBalance: unauthorized ? state.tillBalance : state.tillBalance + amount,
-    tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "add"),
+    tillDenoms: unauthorized
+      ? state.tillDenoms
+      : updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "add"),
     nextSerial: state.nextSerial + 1,
     dialog: null,
     message: unauthorized
@@ -669,6 +671,7 @@ function reverseTx(state: SessionState, ref: string): SessionState {
   const tillChange = tx.fnId === "1001" ? tx.amount : -tx.amount;
   return {
     ...state,
+    tx: { ...state.tx, ref },
     transactions: newTransactions,
     customers: newCustomers,
     tillBalance: state.tillBalance + tillChange,
@@ -676,7 +679,7 @@ function reverseTx(state: SessionState, ref: string): SessionState {
     dialog: null,
     message: {
       kind: "ok",
-      text: `Transaction ${escapeHtml(ref)} reversed. Contra entries posted. Account balance restored to ${ENV.ccy} ${fmt(newAvail)}. Till cash position restored to ${ENV.ccy} ${fmt(state.tillBalance + tillChange)}.`,
+      text: `Transaction ${ref} reversed. Contra entries posted. Account balance restored to ${ENV.ccy} ${fmt(newAvail)}. Till cash position restored to ${ENV.ccy} ${fmt(state.tillBalance + tillChange)}.`,
     },
   };
 }
