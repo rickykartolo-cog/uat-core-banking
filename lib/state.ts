@@ -552,7 +552,22 @@ function authorizeTx(state: SessionState, ref: string): SessionState {
 
 function rejectTx(state: SessionState, ref: string): SessionState {
   const txIndex = state.transactions.findIndex((t) => t.ref === ref);
-  if (txIndex < 0) return state;
+  if (txIndex < 0) {
+    return {
+      ...state,
+      message: { kind: "err", text: `Transaction ${ref} is not available for authorization.` },
+    };
+  }
+  const target = state.transactions[txIndex];
+  if (target.authorized || target.status !== "unauthorized") {
+    return {
+      ...state,
+      message: {
+        kind: "err",
+        text: `Transaction ${ref} is already authorized and cannot be rejected. Use transaction reversal instead.`,
+      },
+    };
+  }
   const newTransactions = [...state.transactions];
   newTransactions.splice(txIndex, 1);
   return {

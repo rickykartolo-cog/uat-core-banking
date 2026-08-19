@@ -105,7 +105,7 @@ export function VaultIn({
           ...state.tx,
           ref,
           amount: amountStr,
-          denominations: denoms,
+          denominations: structuredClone(denoms),
           checker: ENV.supervisor,
         },
         message: {

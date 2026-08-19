@@ -37,7 +37,7 @@ export function AuthQueue({
   const [picked, setPicked] = useState<string | null>(null);
   // The selected row is always identified by its own reference.
   const selectedRef =
-    picked && queueRows.some((r) => r.ref === picked) ? picked : queueRows[0]?.ref;
+    picked && queueRows.some((r) => r.ref === picked) ? picked : pending[0]?.ref;
 
   const authorize = () => {
     if (selectedRef) {
