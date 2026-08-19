@@ -1,7 +1,7 @@
 "use client";
 
 import { ENV } from "@/lib/config";
-import { SessionState, Action, fmt, isReversible, txDate } from "@/lib/state";
+import { SessionState, Action, escapeHtml, fmt, isReversible, txDate } from "@/lib/state";
 import {
   FCShell,
   Win,
@@ -22,7 +22,7 @@ export function Reversal({
   const tx = state.tx;
   const sameDayTransactions = state.transactions.filter((record) => txDate(record) === ENV.date);
   const eligibleTransactions = sameDayTransactions.filter(
-    (record) => isReversible(record)
+    (record) => isReversible(record, state.customers)
   );
   const ref = tx.ref ?? eligibleTransactions[0]?.ref ?? "";
   const reason = tx.reversalReason ?? "WRONG DENOMINATION PAID OUT";
@@ -34,7 +34,23 @@ export function Reversal({
 
   const fetch = () => {
     const fetchedRef = ref.trim();
-    const fetchedTx = sameDayTransactions.find((record) => record.ref === fetchedRef);
+    if (!fetchedRef) {
+      dispatch({
+        type: "APPLY",
+        partial: {
+          dialog: {
+            kind: "err",
+            title: "Error",
+            code: "ST-REVR-001",
+            text: "Transaction reference is required.",
+            buttons: [{ label: "Ok", primary: true }],
+          },
+          message: null,
+        },
+      });
+      return;
+    }
+    const fetchedTx = state.transactions.find((record) => record.ref === fetchedRef);
     if (!fetchedTx) {
       dispatch({
         type: "APPLY",
@@ -43,7 +59,7 @@ export function Reversal({
             kind: "err",
             title: "Error",
             code: "ST-REVR-001",
-            text: `Transaction ${fetchedRef} not found.`,
+            text: `Transaction ${escapeHtml(fetchedRef)} not found.`,
             buttons: [{ label: "Ok", primary: true }],
           },
           message: null,
@@ -62,7 +78,7 @@ export function Reversal({
   };
 
   const requestReverse = () => {
-    if (!isReversible(targetTx)) {
+    if (!isReversible(targetTx, state.customers)) {
       showRefusal();
       return;
     }
@@ -73,7 +89,7 @@ export function Reversal({
           kind: "warn",
           title: "Confirm reversal",
           code: "ST-REVR-004",
-          text: `Reversal of ${ref} will post contra entries for ${ENV.ccy} ${fmt(
+          text: `Reversal of ${escapeHtml(ref)} will post contra entries for ${ENV.ccy} ${fmt(
             (targetTx?.amount ?? 0) + (targetTx?.charge ?? 0)
           )} and restore till denominations. Supervisor authorization is required. Proceed?`,
           buttons: [

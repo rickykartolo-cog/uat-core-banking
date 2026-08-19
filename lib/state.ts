@@ -130,8 +130,27 @@ export function txDate(tx: Pick<Transaction, "date">): string {
   return tx.date ?? ENV.date;
 }
 
-export function isReversible(tx: Transaction | undefined): boolean {
-  return !!tx && tx.authorized && tx.status !== "unauthorized" && tx.status !== "reversed" && txDate(tx) === ENV.date;
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function isReversible(
+  tx: Transaction | undefined,
+  customers: Record<string, Customer>
+): boolean {
+  return (
+    !!tx &&
+    !!customers[tx.account] &&
+    tx.authorized &&
+    tx.status !== "unauthorized" &&
+    tx.status !== "reversed" &&
+    txDate(tx) === ENV.date
+  );
 }
 
 export function initialState(): SessionState {
@@ -587,7 +606,7 @@ function reverseTx(state: SessionState, ref: string): SessionState {
         kind: "err",
         title: "Error",
         code: "ST-REVR-001",
-        text: `Transaction ${ref} not found.`,
+        text: `Transaction ${escapeHtml(ref)} not found.`,
         buttons: [{ label: "Ok", primary: true }],
       },
     };
@@ -600,7 +619,7 @@ function reverseTx(state: SessionState, ref: string): SessionState {
         kind: "err",
         title: "Error",
         code: "ST-REVR-002",
-        text: `Transaction ${ref} is unauthorized and cannot be reversed.`,
+        text: `Transaction ${escapeHtml(ref)} is unauthorized and cannot be reversed.`,
         buttons: [{ label: "Ok", primary: true }],
       },
     };
@@ -612,7 +631,7 @@ function reverseTx(state: SessionState, ref: string): SessionState {
         kind: "err",
         title: "Error",
         code: "ST-REVR-003",
-        text: `Transaction ${ref} has already been reversed.`,
+        text: `Transaction ${escapeHtml(ref)} has already been reversed.`,
         buttons: [{ label: "Ok", primary: true }],
       },
     };
@@ -624,7 +643,19 @@ function reverseTx(state: SessionState, ref: string): SessionState {
         kind: "err",
         title: "Error",
         code: "ST-REVR-005",
-        text: `Transaction ${ref} is dated ${txDate(tx)} and cannot be reversed on business date ${ENV.date}.`,
+        text: `Transaction ${escapeHtml(ref)} is dated ${txDate(tx)} and cannot be reversed on business date ${ENV.date}.`,
+        buttons: [{ label: "Ok", primary: true }],
+      },
+    };
+  }
+  if (!state.customers[tx.account]) {
+    return {
+      ...state,
+      dialog: {
+        kind: "err",
+        title: "Error",
+        code: "ST-REVR-006",
+        text: `Transaction ${escapeHtml(ref)} is not a customer account transaction and cannot be reversed from this screen.`,
         buttons: [{ label: "Ok", primary: true }],
       },
     };
@@ -645,7 +676,7 @@ function reverseTx(state: SessionState, ref: string): SessionState {
     dialog: null,
     message: {
       kind: "ok",
-      text: `Transaction ${ref} reversed. Contra entries posted. Account balance restored to ${ENV.ccy} ${fmt(newAvail)}. Till cash position restored to ${ENV.ccy} ${fmt(state.tillBalance + tillChange)}.`,
+      text: `Transaction ${escapeHtml(ref)} reversed. Contra entries posted. Account balance restored to ${ENV.ccy} ${fmt(newAvail)}. Till cash position restored to ${ENV.ccy} ${fmt(state.tillBalance + tillChange)}.`,
     },
   };
 }
