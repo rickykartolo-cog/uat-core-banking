@@ -130,6 +130,10 @@ export function txDate(tx: Pick<Transaction, "date">): string {
   return tx.date ?? ENV.date;
 }
 
+export function isReversible(tx: Transaction | undefined): boolean {
+  return !!tx && tx.authorized && tx.status !== "unauthorized" && tx.status !== "reversed" && txDate(tx) === ENV.date;
+}
+
 export function initialState(): SessionState {
   return stepSnapshot({
     currentStep: 0,
@@ -638,6 +642,7 @@ function reverseTx(state: SessionState, ref: string): SessionState {
     customers: newCustomers,
     tillBalance: state.tillBalance + tillChange,
     tillDenoms: updateTillDenoms(state.tillDenoms, tx.denominations, tx.fnId === "1001" ? "add" : "remove"),
+    dialog: null,
     message: {
       kind: "ok",
       text: `Transaction ${ref} reversed. Contra entries posted. Account balance restored to ${ENV.ccy} ${fmt(newAvail)}. Till cash position restored to ${ENV.ccy} ${fmt(state.tillBalance + tillChange)}.`,

@@ -1,7 +1,7 @@
 "use client";
 
 import { ENV } from "@/lib/config";
-import { SessionState, Action, fmt, txDate } from "@/lib/state";
+import { SessionState, Action, fmt, isReversible, txDate } from "@/lib/state";
 import {
   FCShell,
   Win,
@@ -22,13 +22,9 @@ export function Reversal({
   const tx = state.tx;
   const sameDayTransactions = state.transactions.filter((record) => txDate(record) === ENV.date);
   const eligibleTransactions = sameDayTransactions.filter(
-    (record) => record.authorized && record.status !== "reversed"
+    (record) => isReversible(record)
   );
-  const ref =
-    (tx.ref && state.transactions.some((record) => record.ref === tx.ref) ? tx.ref : undefined) ??
-    eligibleTransactions[0]?.ref ??
-    tx.ref ??
-    "";
+  const ref = tx.ref ?? eligibleTransactions[0]?.ref ?? "";
   const reason = tx.reversalReason ?? "WRONG DENOMINATION PAID OUT";
 
   const targetTx = state.transactions.find((t) => t.ref === ref);
@@ -36,14 +32,37 @@ export function Reversal({
   const setRef = (value: string) =>
     dispatch({ type: "APPLY", partial: { tx: { ...tx, ref: value } } });
 
-  const fetch = () => setRef(ref.trim());
+  const fetch = () => {
+    const fetchedRef = ref.trim();
+    const fetchedTx = sameDayTransactions.find((record) => record.ref === fetchedRef);
+    if (!fetchedTx) {
+      dispatch({
+        type: "APPLY",
+        partial: {
+          dialog: {
+            kind: "err",
+            title: "Error",
+            code: "ST-REVR-001",
+            text: `Transaction ${fetchedRef} not found.`,
+            buttons: [{ label: "Ok", primary: true }],
+          },
+          message: null,
+        },
+      });
+      return;
+    }
+    dispatch({
+      type: "APPLY",
+      partial: { tx: { ...tx, ref: fetchedRef }, dialog: null, message: null },
+    });
+  };
 
   const showRefusal = () => {
     dispatch({ type: "REVERSE_TX", ref });
   };
 
   const requestReverse = () => {
-    if (!targetTx || !targetTx.authorized || targetTx.status === "unauthorized" || targetTx.status === "reversed" || txDate(targetTx) !== ENV.date) {
+    if (!isReversible(targetTx)) {
       showRefusal();
       return;
     }
