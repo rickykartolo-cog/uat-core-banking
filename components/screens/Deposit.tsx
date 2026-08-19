@@ -115,7 +115,9 @@ export function Deposit({
   const authorize = () => {
     if (ref) {
       dispatch({ type: "AUTHORIZE_TX", ref });
-      dispatch({ type: "NEXT" });
+      if (!isTillBlocked(state, "1401")) {
+        dispatch({ type: "NEXT" });
+      }
     }
   };
 
@@ -276,7 +278,7 @@ export function Deposit({
                           message: "Enter query would open the transaction lookup screen.",
                         }),
                     },
-                    { label: "Save", dim: blocked, onClick: blocked ? undefined : save },
+                    { label: "Save", dim: blocked, onClick: save },
                     {
                       label: "Hold",
                       onClick: () =>

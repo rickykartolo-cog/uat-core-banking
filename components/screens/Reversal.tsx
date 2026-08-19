@@ -1,7 +1,7 @@
 "use client";
 
 import { ENV, CUSTOMERS } from "@/lib/config";
-import { SessionState, Action, fmt } from "@/lib/state";
+import { SessionState, Action, fmt, isTillBlocked } from "@/lib/state";
 import {
   FCShell,
   Win,
@@ -49,7 +49,9 @@ export function Reversal({
     if (action === "CONFIRM_REVERSE") {
       dispatch({ type: "REVERSE_TX", ref });
     }
-    dispatch({ type: "CLOSE_DIALOG" });
+    if (!targetTx || !isTillBlocked(state, targetTx.fnId)) {
+      dispatch({ type: "CLOSE_DIALOG" });
+    }
   };
 
   const openLov = (field: string, title: string) =>
