@@ -68,6 +68,7 @@ export interface SessionState {
   currentStep: number;
   viewFnId: string;
   currentUser: string;
+  signedOnUser: string;
   loggedIn: boolean;
   tillOpen: boolean;
   tillBalance: number;
@@ -159,6 +160,7 @@ export function initialState(): SessionState {
     currentStep: 0,
     viewFnId: "",
     currentUser: ENV.teller,
+    signedOnUser: ENV.teller,
     loggedIn: false,
     tillOpen: false,
     tillBalance: 0,
@@ -216,7 +218,7 @@ export function reducer(state: SessionState, action: Action): SessionState {
       return stepSnapshot({ ...state, currentStep: Math.max(state.currentStep - 1, 0) });
 
     case "LOGIN":
-      return { ...state, currentUser: action.user, loggedIn: true };
+      return { ...state, currentUser: action.user, signedOnUser: action.user, loggedIn: true };
 
     case "OPEN_TILL":
       return { ...state, tillOpen: true };
@@ -320,7 +322,11 @@ export function reducer(state: SessionState, action: Action): SessionState {
 
 function stepSnapshot(state: SessionState): SessionState {
   const step = state.currentStep;
-  const snapshot: Partial<SessionState> = { dialog: null, message: null };
+  const snapshot: Partial<SessionState> = {
+    dialog: null,
+    message: null,
+    currentUser: state.signedOnUser,
+  };
   const tx: CurrentTx = {};
 
   if (step === 0) {
