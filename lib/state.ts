@@ -479,9 +479,7 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
     transactions: [...state.transactions, tx],
     customers: newCustomers,
     tillBalance: unauthorized ? state.tillBalance : state.tillBalance + amount,
-    tillDenoms: unauthorized
-      ? state.tillDenoms
-      : updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "add"),
+    tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "add"),
     nextSerial: state.nextSerial + 1,
     dialog: null,
     message: unauthorized
@@ -611,6 +609,7 @@ function reverseTx(state: SessionState, ref: string): SessionState {
         text: `Transaction ${escapeHtml(ref)} not found.`,
         buttons: [{ label: "Ok", primary: true }],
       },
+      message: null,
     };
   }
   const tx = state.transactions[txIndex];
@@ -624,6 +623,7 @@ function reverseTx(state: SessionState, ref: string): SessionState {
         text: `Transaction ${escapeHtml(ref)} is unauthorized and cannot be reversed.`,
         buttons: [{ label: "Ok", primary: true }],
       },
+      message: null,
     };
   }
   if (tx.status === "reversed") {
@@ -636,6 +636,7 @@ function reverseTx(state: SessionState, ref: string): SessionState {
         text: `Transaction ${escapeHtml(ref)} has already been reversed.`,
         buttons: [{ label: "Ok", primary: true }],
       },
+      message: null,
     };
   }
   if (txDate(tx) !== ENV.date) {
@@ -648,6 +649,7 @@ function reverseTx(state: SessionState, ref: string): SessionState {
         text: `Transaction ${escapeHtml(ref)} is dated ${txDate(tx)} and cannot be reversed on business date ${ENV.date}.`,
         buttons: [{ label: "Ok", primary: true }],
       },
+      message: null,
     };
   }
   if (!state.customers[tx.account]) {
@@ -660,7 +662,26 @@ function reverseTx(state: SessionState, ref: string): SessionState {
         text: `Transaction ${escapeHtml(ref)} is not a customer account transaction and cannot be reversed from this screen.`,
         buttons: [{ label: "Ok", primary: true }],
       },
+      message: null,
     };
+  }
+  if (tx.fnId !== "1001") {
+    for (const denomination of tx.denominations) {
+      const available = state.tillDenoms[denomination.code] ?? 0;
+      if (available < denomination.units) {
+        return {
+          ...state,
+          dialog: {
+            kind: "err",
+            title: "Error",
+            code: "ST-TILL-042",
+            text: `Till does not hold enough ${denomination.code} notes. Available ${available}, requested ${denomination.units}.`,
+            buttons: [{ label: "Ok", primary: true }],
+          },
+          message: null,
+        };
+      }
+    }
   }
   const customer = state.customers[tx.account];
   const newAvail = tx.fnId === "1001" ? customer.avail + tx.amount + tx.charge : customer.avail - tx.amount + tx.charge;

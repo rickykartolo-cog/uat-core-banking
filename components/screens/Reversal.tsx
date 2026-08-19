@@ -24,7 +24,7 @@ export function Reversal({
   const eligibleTransactions = sameDayTransactions.filter(
     (record) => isReversible(record, state.customers)
   );
-  const ref = tx.ref ?? eligibleTransactions[0]?.ref ?? "";
+  const ref = tx.ref ?? eligibleTransactions[eligibleTransactions.length - 1]?.ref ?? "";
   const reason = tx.reversalReason ?? "WRONG DENOMINATION PAID OUT";
 
   const targetTx = state.transactions.find((t) => t.ref === ref);
