@@ -334,8 +334,10 @@ function stepSnapshot(state: SessionState): SessionState {
     }
   }
 
-  if (step >= 14 && step <= 17) {
+  if (step >= 14 && step <= 16) {
     snapshot.currentUser = ENV.supervisor;
+  } else if (step !== 28 && step !== 29) {
+    snapshot.currentUser = ENV.teller;
   }
 
   if (step >= 17 && step <= 23) {
