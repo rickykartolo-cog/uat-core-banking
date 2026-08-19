@@ -225,7 +225,9 @@ export function reducer(state: SessionState, action: Action): SessionState {
     }
 
     case "SET_DENOM": {
-      const denoms = state.tx.denominations ?? [];
+      const denoms =
+        state.tx.denominations ??
+        structuredClone(DEFAULT_DENOMS[state.tx.fnId ?? ""] ?? []);
       const updated = denoms.map((d) =>
         d.code === action.code ? { ...d, units: parseInt(action.units || "0", 10) || 0 } : d
       );
@@ -510,6 +512,19 @@ function saveWithdrawal(state: SessionState): SessionState {
     };
   }
 
+  if (!state.tx.sigOk) {
+    return {
+      ...state,
+      dialog: {
+        kind: "err",
+        title: "Error",
+        code: "ST-SIGN-001",
+        text: "Signature verification is mandatory before saving a cash withdrawal above the branch threshold.",
+        buttons: [{ label: "Ok", primary: true }],
+      },
+    };
+  }
+
   const totalDenom = denomTotal(state.tx.denominations);
   if (totalDenom !== amount) {
     return {
@@ -540,6 +555,7 @@ function saveWithdrawal(state: SessionState): SessionState {
   }
 
   const ref = state.tx.ref || makeRef("CHWL", state.nextSerial);
+  const newBal = customer.bal - required;
   const newAvail = customer.avail - required;
 
   const tx: Transaction = {
@@ -558,7 +574,7 @@ function saveWithdrawal(state: SessionState): SessionState {
     mod: 1,
   };
 
-  const newCustomers = { ...state.customers, [customer.acc]: { ...customer, bal: newAvail, avail: newAvail } };
+  const newCustomers = { ...state.customers, [customer.acc]: { ...customer, bal: newBal, avail: newAvail } };
 
   return {
     ...state,
@@ -568,7 +584,7 @@ function saveWithdrawal(state: SessionState): SessionState {
     tillBalance: state.tillBalance - amount,
     tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "remove"),
     nextSerial: state.nextSerial + 1,
-    message: { kind: "ok", text: `Transaction ${ref} saved and auto-authorized. Cash paid ${ENV.ccy} ${fmt(amount)}. Account balance ${ENV.ccy} ${fmt(newAvail)}. Till cash position ${ENV.ccy} ${fmt(state.tillBalance - amount)}.` },
+    message: { kind: "ok", text: `Transaction ${ref} saved and auto-authorized. Cash paid ${ENV.ccy} ${fmt(amount)}. Account balance ${ENV.ccy} ${fmt(newBal)}. Till cash position ${ENV.ccy} ${fmt(state.tillBalance - amount)}.` },
   };
 }
 
