@@ -109,6 +109,26 @@ export const DEFAULT_DENOMS: Record<string, Denom[]> = {
   ],
 };
 
+const TILL_REQUIRED_FNS = ["1401", "1001", "9008"];
+
+export function requiresOpenTill(fnId: string | undefined): boolean {
+  return !!fnId && TILL_REQUIRED_FNS.includes(fnId);
+}
+
+export function isTillBlocked(state: SessionState, fnId: string | undefined): boolean {
+  return requiresOpenTill(fnId) && !state.tillOpen;
+}
+
+export function tillClosedDialog(state: SessionState): DialogSpec {
+  return {
+    kind: "err",
+    title: "Error",
+    code: "ST-TILL-002",
+    text: `Till <b>${ENV.till}</b> is not open for user ${state.currentUser} for branch date ${ENV.date}. Buy cash from the vault to open the till.`,
+    buttons: [{ label: "Ok", primary: true }],
+  };
+}
+
 export function makeRef(product: string, serial: number): string {
   const julian = "26230";
   return `${ENV.branch}${product}${julian}${String(serial).padStart(4, "0")}`;
@@ -269,7 +289,10 @@ export function reducer(state: SessionState, action: Action): SessionState {
 
     case "LAUNCH_FUNCTION": {
       const step = FN_TO_STEP[action.fnId] ?? 0;
-      return stepSnapshot({ ...state, currentStep: step });
+      const next = stepSnapshot({ ...state, currentStep: step });
+      return isTillBlocked(next, action.fnId)
+        ? { ...next, dialog: tillClosedDialog(next) }
+        : next;
     }
 
     case "PLACEHOLDER":
@@ -404,8 +427,27 @@ function denomTotal(denoms: Denom[] | undefined): number {
   return (denoms ?? []).reduce((sum, d) => sum + d.value * d.units, 0);
 }
 
+function denomMismatchDialog(total: number, amount: number): DialogSpec {
+  return {
+    kind: "err",
+    title: "Error",
+    code: "ST-DENM-001",
+    text: `Denomination total ${ENV.ccy} ${fmt(total)} does not match transaction amount ${ENV.ccy} ${fmt(amount)}.`,
+    buttons: [{ label: "Ok", primary: true }],
+  };
+}
+
 function saveDeposit(state: SessionState): SessionState {
   const amount = parseAmount(state.tx.amount || "0");
+  if (isTillBlocked(state, "1401")) {
+    return { ...state, dialog: tillClosedDialog(state) };
+  }
+
+  const total = denomTotal(state.tx.denominations);
+  if (total !== amount) {
+    return { ...state, dialog: denomMismatchDialog(total, amount) };
+  }
+
   if (amount > ENV.tellerLimit) {
     return {
       ...state,
@@ -493,6 +535,9 @@ function rejectTx(state: SessionState, ref: string): SessionState {
 }
 
 function saveWithdrawal(state: SessionState): SessionState {
+  if (isTillBlocked(state, "1001")) {
+    return { ...state, dialog: tillClosedDialog(state) };
+  }
   const amount = parseAmount(state.tx.amount || "0");
   const customer = state.tx.customer!;
   const charge = state.tx.charge ?? 1.0;
@@ -512,16 +557,7 @@ function saveWithdrawal(state: SessionState): SessionState {
 
   const totalDenom = denomTotal(state.tx.denominations);
   if (totalDenom !== amount) {
-    return {
-      ...state,
-      dialog: {
-        kind: "err",
-        title: "Error",
-        code: "ST-DENM-001",
-        text: `Denomination total ${ENV.ccy} ${fmt(totalDenom)} does not match transaction amount ${ENV.ccy} ${fmt(amount)}.`,
-        buttons: [{ label: "Ok", primary: true }],
-      },
-    };
+    return { ...state, dialog: denomMismatchDialog(totalDenom, amount) };
   }
 
   for (const d of state.tx.denominations ?? []) {
@@ -605,19 +641,13 @@ function reverseTx(state: SessionState, ref: string): SessionState {
 }
 
 function transferToVault(state: SessionState): SessionState {
+  if (isTillBlocked(state, "9008")) {
+    return { ...state, dialog: tillClosedDialog(state) };
+  }
   const amount = parseAmount(state.tx.amount || "0");
   const total = denomTotal(state.tx.denominations);
   if (total !== amount) {
-    return {
-      ...state,
-      dialog: {
-        kind: "err",
-        title: "Error",
-        code: "ST-DENM-001",
-        text: `Denomination total ${ENV.ccy} ${fmt(total)} does not match transaction amount ${ENV.ccy} ${fmt(amount)}.`,
-        buttons: [{ label: "Ok", primary: true }],
-      },
-    };
+    return { ...state, dialog: denomMismatchDialog(total, amount) };
   }
 
   for (const d of state.tx.denominations ?? []) {

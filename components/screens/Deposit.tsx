@@ -9,6 +9,7 @@ import {
   fmt,
   parseAmount,
   makeRef,
+  isTillBlocked,
 } from "@/lib/state";
 import {
   FCShell,
@@ -38,6 +39,7 @@ export function Deposit({
 }) {
   const tx = state.tx;
   const isAuth = state.currentStep === 15 || state.currentStep === 16;
+  const blocked = isTillBlocked(state, "1401");
   const account = tx.account ?? "";
   const customer = tx.customer;
   const fetched = !!customer;
@@ -65,8 +67,12 @@ export function Deposit({
 
   const setAmount = (v: string) => dispatch({ type: "SET_AMOUNT", amount: v });
 
-  const setDenom = (code: string, units: string) =>
-    dispatch({ type: "SET_DENOM", code, units });
+  const setDenom = (code: string, units: string) => {
+    const updated = denoms.map((d) =>
+      d.code === code ? { ...d, units: parseInt(units || "0", 10) || 0 } : d
+    );
+    dispatch({ type: "APPLY", partial: { tx: { ...tx, denominations: updated } } });
+  };
 
   const setNarrative = (v: string) =>
     dispatch({ type: "APPLY", partial: { tx: { ...tx, narrative: v } } });
@@ -179,20 +185,24 @@ export function Deposit({
 
   const misTab = (
     <div className="grid2">
-      <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} onChange={setNarrative} />
+      <Field
+        label="Narrative"
+        value={tx.narrative || "CASH DEPOSIT — COUNTER"}
+        onChange={blocked ? undefined : setNarrative}
+      />
       <Field label="Instrument code" value="" />
       <Field
         label="MIS group"
         value={tx.misGroup ?? "RETAIL"}
         lov
-        onLov={() => openLov("misGroup", "Select MIS group")}
+        onLov={blocked ? undefined : () => openLov("misGroup", "Select MIS group")}
       />
       <Field label="Cost centre" value="BR000-TELLER" readOnly />
       <Field
         label="UDF — source"
         value={tx.udfSource ?? "BRANCH"}
         lov
-        onLov={() => openLov("udfSource", "Select UDF source")}
+        onLov={blocked ? undefined : () => openLov("udfSource", "Select UDF source")}
       />
       <Field label="UDF — purpose" value="SALARY PROCEEDS" />
     </div>
@@ -212,7 +222,7 @@ export function Deposit({
       <DenomTable
         rows={denoms}
         totalLabel={{ l: "Total denomination amount", v: fmt(total) }}
-        onChange={isAuth ? undefined : setDenom}
+        onChange={isAuth || blocked ? undefined : setDenom}
       />
     );
 
@@ -270,7 +280,7 @@ export function Deposit({
                           message: "Enter query would open the transaction lookup screen.",
                         }),
                     },
-                    { label: "Save", onClick: save },
+                    { label: "Save", dim: blocked, onClick: blocked ? undefined : save },
                     {
                       label: "Hold",
                       onClick: () =>
@@ -317,9 +327,9 @@ export function Deposit({
               required
               lov
               focus={state.currentStep === 6}
-              onChange={isAuth ? undefined : setAccount}
-              onBlur={isAuth ? undefined : fetchAccount}
-              onLov={() => openLov("account", "Select account")}
+              onChange={isAuth || blocked ? undefined : setAccount}
+              onBlur={isAuth || blocked ? undefined : fetchAccount}
+              onLov={blocked ? undefined : () => openLov("account", "Select account")}
             />
             <Field label="Account branch" value={customer?.br ?? ""} readOnly />
             <Field label="Account description" value={customer?.name ?? ""} readOnly />
@@ -349,7 +359,7 @@ export function Deposit({
               value={tx.ccy ?? (fetched ? ENV.ccy : "")}
               required
               lov
-              onLov={() => openLov("currency", "Select currency")}
+              onLov={blocked ? undefined : () => openLov("currency", "Select currency")}
             />
             <Field
               label="Transaction amount"
@@ -357,12 +367,16 @@ export function Deposit({
               required
               number
               focus={state.currentStep === 8}
-              onChange={isAuth || !fetched ? undefined : setAmount}
+              onChange={isAuth || blocked || !fetched ? undefined : setAmount}
             />
             <Field label="Exchange rate" value={fetched ? "1.0000" : ""} readOnly number />
             <Field label="Account amount" value={tx.accAmount ?? ""} readOnly number />
             <Field label="Value date" value={ENV.date} readOnly />
-            <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} onChange={setNarrative} />
+            <Field
+              label="Narrative"
+              value={tx.narrative || "CASH DEPOSIT — COUNTER"}
+              onChange={blocked ? undefined : setNarrative}
+            />
           </div>
         </Section>
 
@@ -370,7 +384,7 @@ export function Deposit({
           <Tabs
             tabs={["Denomination", "Charge", "MIS / UDF"]}
             active={tab}
-            onSelect={isAuth ? undefined : setTab}
+            onSelect={isAuth || blocked ? undefined : setTab}
           />
           <div className="tabwrap">{tabBody}</div>
         </div>
