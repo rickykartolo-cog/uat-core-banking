@@ -176,8 +176,13 @@ export type Action =
 
 export function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
-    case "APPLY":
-      return { ...state, ...action.partial };
+    case "APPLY": {
+      const next = { ...state, ...action.partial };
+      if (action.partial.tillOpen === true) {
+        next.eotiMarked = false;
+      }
+      return next;
+    }
 
     case "GO":
       return stepSnapshot({ ...state, currentStep: action.step });
@@ -192,7 +197,7 @@ export function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, currentUser: action.user, loggedIn: true };
 
     case "OPEN_TILL":
-      return { ...state, tillOpen: true };
+      return { ...state, tillOpen: true, eotiMarked: false };
 
     case "CLOSE_TILL":
       return { ...state, tillOpen: false };
@@ -462,6 +467,7 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
     tillBalance: unauthorized ? state.tillBalance : state.tillBalance + amount,
     tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "add"),
     nextSerial: state.nextSerial + 1,
+    eotiMarked: unauthorized ? false : state.eotiMarked,
     dialog: null,
     message: unauthorized
       ? { kind: "warn", text: `Transaction ${ref} saved. Status: unauthorized — pending supervisor authorization. Customer balance not yet updated.` }
