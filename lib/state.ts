@@ -130,12 +130,12 @@ export function tillClosedDialog(state: SessionState): DialogSpec {
   };
 }
 
-export function resolveDenominations(state: SessionState): Denom[] {
+export function resolveDenominations(state: SessionState, fnId = state.tx.fnId): Denom[] {
   if (state.tx.denominations) return state.tx.denominations;
-  const template = DEFAULT_DENOMS[state.tx.fnId ?? ""] ?? [];
+  const template = DEFAULT_DENOMS[fnId ?? ""] ?? [];
   return template.map((d) => ({
     ...d,
-    units: state.tx.fnId === "1401" && !state.tx.customer ? 0 : d.units,
+    units: fnId === "1401" && !state.tx.customer ? 0 : d.units,
   }));
 }
 
@@ -454,7 +454,7 @@ function denomMismatchDialog(total: number, amount: number): DialogSpec {
 
 function saveDeposit(state: SessionState): SessionState {
   const amount = parseAmount(state.tx.amount || "0");
-  const denoms = resolveDenominations(state);
+  const denoms = resolveDenominations(state, "1401");
   if (isTillBlocked(state, "1401")) {
     return { ...state, dialog: tillClosedDialog(state) };
   }
@@ -481,7 +481,7 @@ function saveDeposit(state: SessionState): SessionState {
 
 function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionState {
   const amount = parseAmount(state.tx.amount || "0");
-  const denoms = resolveDenominations(state);
+  const denoms = resolveDenominations(state, "1401");
   const charge = state.tx.charge ?? 2.18;
   const ref = state.tx.ref || makeRef("CHDP", state.nextSerial);
   const customer = state.tx.customer!;
@@ -559,7 +559,7 @@ function saveWithdrawal(state: SessionState): SessionState {
     return { ...state, dialog: tillClosedDialog(state) };
   }
   const amount = parseAmount(state.tx.amount || "0");
-  const denoms = resolveDenominations(state);
+  const denoms = resolveDenominations(state, "1001");
   const customer = state.tx.customer!;
   const charge = state.tx.charge ?? 1.0;
   const required = amount + charge;
@@ -669,7 +669,7 @@ function transferToVault(state: SessionState): SessionState {
     return { ...state, dialog: tillClosedDialog(state) };
   }
   const amount = parseAmount(state.tx.amount || "0");
-  const denoms = resolveDenominations(state);
+  const denoms = resolveDenominations(state, "9008");
   const total = denomTotal(denoms);
   if (Math.round(total * 100) !== Math.round(amount * 100)) {
     return { ...state, dialog: denomMismatchDialog(total, amount) };

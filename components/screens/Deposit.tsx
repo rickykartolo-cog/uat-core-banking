@@ -45,7 +45,7 @@ export function Deposit({
   const fetched = !!customer;
   const amountStr = tx.amount ?? "";
   const amount = parseAmount(amountStr);
-  const denoms = resolveDenominations(state);
+  const denoms = resolveDenominations(state, "1401");
   const total = denomTotal(denoms);
   const ref = tx.ref ?? "";
 
