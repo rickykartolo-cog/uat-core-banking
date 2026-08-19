@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ENV } from "@/lib/config";
 import { SessionState, Action, fmt } from "@/lib/state";
 import { FCShell, Win, Section, Field, ActionBar, MsgBar } from "@/components/ui";
@@ -34,17 +34,23 @@ export function AuthQueue({
     },
   ];
 
-  const selectedRef = pending[0]?.ref;
+  const [picked, setPicked] = useState<string | null>(null);
+  // The selected row is always identified by its own reference. Only real records are
+  // selectable, so the static prototype row is never acted on.
+  const selectedRef =
+    picked && pending.some((t) => t.ref === picked) ? picked : pending[0]?.ref;
 
-  const authorize = () => {
-    dispatch({ type: "GO", step: 15 });
-  };
-
-  const reject = () => {
-    if (selectedRef) {
-      dispatch({ type: "REJECT_TX", ref: selectedRef });
+  const withSelection = (run: (ref: string) => void) => () => {
+    if (!selectedRef) {
+      dispatch({ type: "PLACEHOLDER", message: "Select a record pending authorization first." });
+      return;
     }
+    run(selectedRef);
   };
+
+  const authorize = withSelection((ref) => dispatch({ type: "AUTHORIZE_TX", ref }));
+  const view = withSelection((ref) => dispatch({ type: "OPEN_AUTHORIZE", ref }));
+  const reject = withSelection((ref) => dispatch({ type: "REJECT_TX", ref }));
 
   const openLov = (field: string, title: string) =>
     dispatch({ type: "OPEN_LOV", field, title });
@@ -60,7 +66,7 @@ export function AuthQueue({
               { label: "Fetch", primary: true },
               { label: "Authorize", onClick: authorize },
               { label: "Reject", onClick: reject },
-              { label: "View", onClick: authorize },
+              { label: "View", onClick: view },
               { label: "Exit" },
             ]}
           />
@@ -98,8 +104,16 @@ export function AuthQueue({
               </tr>
             </thead>
             <tbody>
-              {queueRows.map((row, idx) => (
-                <tr key={row.ref} className={idx === 0 ? "sel" : undefined}>
+              {queueRows.map((row) => (
+                <tr
+                  key={row.ref}
+                  className={row.ref === selectedRef ? "sel" : undefined}
+                  onClick={
+                    pending.some((t) => t.ref === row.ref)
+                      ? () => setPicked(row.ref)
+                      : undefined
+                  }
+                >
                   <td>{row.fnId}</td>
                   <td>{row.ref}</td>
                   <td>{row.account}</td>

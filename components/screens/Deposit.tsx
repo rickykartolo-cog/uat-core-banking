@@ -5,10 +5,12 @@ import {
   SessionState,
   Action,
   Transaction,
-  DEFAULT_DENOMS,
+  DEPOSIT_UDF_DEFAULTS,
   fmt,
   parseAmount,
   makeRef,
+  isTillBlocked,
+  resolveDenominations,
 } from "@/lib/state";
 import {
   FCShell,
@@ -37,13 +39,14 @@ export function Deposit({
   dispatch: React.Dispatch<Action>;
 }) {
   const tx = state.tx;
-  const isAuth = state.currentStep === 15 || state.currentStep === 16;
+  const isAuth = tx.mode === "authorize" || state.currentStep === 15 || state.currentStep === 16;
+  const blocked = isTillBlocked(state, "1401");
   const account = tx.account ?? "";
   const customer = tx.customer;
   const fetched = !!customer;
   const amountStr = tx.amount ?? "";
   const amount = parseAmount(amountStr);
-  const denoms = tx.denominations ?? (fetched ? DEFAULT_DENOMS["1401"] : DEFAULT_DENOMS["1401"].map((d) => ({ ...d, units: 0 })));
+  const denoms = resolveDenominations(state, "1401");
   const total = denomTotal(denoms);
   const ref = tx.ref ?? "";
 
@@ -92,6 +95,10 @@ export function Deposit({
       status: "unauthorized",
       denominations: denoms,
       mod: 1,
+      misGroup: tx.misGroup ?? DEPOSIT_UDF_DEFAULTS.misGroup,
+      udfSource: (tx.udfSource ?? DEPOSIT_UDF_DEFAULTS.udfSource).trim(),
+      udfPurpose: tx.udfPurpose ?? DEPOSIT_UDF_DEFAULTS.udfPurpose,
+      instrumentCode: tx.instrumentCode,
     };
 
     dispatch({
@@ -100,7 +107,7 @@ export function Deposit({
         dialog: null,
         currentStep: 13,
         transactions: [...state.transactions, newTx],
-        tx: { ...tx, ref: newRef, amount: amountStr, charge },
+        tx: { ...tx, ref: newRef, amount: amountStr, charge, misGroup: newTx.misGroup, udfSource: newTx.udfSource, udfPurpose: newTx.udfPurpose, instrumentCode: newTx.instrumentCode },
         nextSerial: state.nextSerial + 1,
         message: {
           kind: "warn",
@@ -110,18 +117,14 @@ export function Deposit({
     });
   };
 
+  // Authorization acts on the reference loaded on this screen and stays on the record so the
+  // checker can see the posted figures and the maker-checker audit trail.
   const authorize = () => {
-    if (ref) {
-      dispatch({ type: "AUTHORIZE_TX", ref });
-      dispatch({ type: "NEXT" });
-    }
+    if (ref) dispatch({ type: "AUTHORIZE_TX", ref });
   };
 
   const reject = () => {
-    if (ref) {
-      dispatch({ type: "REJECT_TX", ref });
-      dispatch({ type: "GO", step: 14 });
-    }
+    if (ref) dispatch({ type: "REJECT_TX", ref });
   };
 
   const handleDialog = (action?: string) => {
@@ -177,24 +180,47 @@ export function Deposit({
     </table>
   );
 
+  const setTxField = (key: "misGroup" | "udfSource" | "udfPurpose" | "instrumentCode") => (v: string) =>
+    dispatch({ type: "APPLY", partial: { tx: { ...tx, [key]: v } } });
+
+  const misGroup = (isAuth ? existingTx?.misGroup : tx.misGroup) ?? DEPOSIT_UDF_DEFAULTS.misGroup;
+  const udfSource = (isAuth ? existingTx?.udfSource : tx.udfSource) ?? DEPOSIT_UDF_DEFAULTS.udfSource;
+  const udfPurpose = (isAuth ? existingTx?.udfPurpose : tx.udfPurpose) ?? DEPOSIT_UDF_DEFAULTS.udfPurpose;
+  const instrumentCode = (isAuth ? existingTx?.instrumentCode : tx.instrumentCode) ?? "";
+
   const misTab = (
     <div className="grid2">
-      <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} onChange={setNarrative} />
-      <Field label="Instrument code" value="" />
+      <Field
+        label="Narrative"
+        value={tx.narrative || "CASH DEPOSIT — COUNTER"}
+        onChange={isAuth || blocked ? undefined : setNarrative}
+        readOnly={isAuth}
+      />
+      <Field
+        label="Instrument code"
+        value={instrumentCode}
+        onChange={isAuth || blocked ? undefined : setTxField("instrumentCode")}
+        readOnly={isAuth}
+      />
       <Field
         label="MIS group"
-        value={tx.misGroup ?? "RETAIL"}
-        lov
-        onLov={() => openLov("misGroup", "Select MIS group")}
+        value={misGroup}
+        readOnly={isAuth}
+        onChange={isAuth || blocked ? undefined : setTxField("misGroup")}
+        lov={!isAuth}
+        onLov={isAuth || blocked ? undefined : () => openLov("misGroup", "Select MIS group")}
       />
       <Field label="Cost centre" value="BR000-TELLER" readOnly />
       <Field
         label="UDF — source"
-        value={tx.udfSource ?? "BRANCH"}
-        lov
-        onLov={() => openLov("udfSource", "Select UDF source")}
+        value={udfSource}
+        required
+        readOnly={isAuth}
+        onChange={isAuth || blocked ? undefined : setTxField("udfSource")}
+        lov={!isAuth}
+        onLov={isAuth || blocked ? undefined : () => openLov("udfSource", "Select UDF source")}
       />
-      <Field label="UDF — purpose" value="SALARY PROCEEDS" />
+      <Field label="UDF — purpose" value={udfPurpose} onChange={isAuth ? undefined : setTxField("udfPurpose")} readOnly={isAuth} />
     </div>
   );
 
@@ -212,7 +238,7 @@ export function Deposit({
       <DenomTable
         rows={denoms}
         totalLabel={{ l: "Total denomination amount", v: fmt(total) }}
-        onChange={isAuth ? undefined : setDenom}
+        onChange={isAuth || blocked ? undefined : setDenom}
       />
     );
 
@@ -270,7 +296,7 @@ export function Deposit({
                           message: "Enter query would open the transaction lookup screen.",
                         }),
                     },
-                    { label: "Save", onClick: save },
+                    { label: "Save", dim: blocked, onClick: save },
                     {
                       label: "Hold",
                       onClick: () =>
@@ -317,9 +343,9 @@ export function Deposit({
               required
               lov
               focus={state.currentStep === 6}
-              onChange={isAuth ? undefined : setAccount}
-              onBlur={isAuth ? undefined : fetchAccount}
-              onLov={() => openLov("account", "Select account")}
+              onChange={isAuth || blocked ? undefined : setAccount}
+              onBlur={isAuth || blocked ? undefined : fetchAccount}
+              onLov={blocked ? undefined : () => openLov("account", "Select account")}
             />
             <Field label="Account branch" value={customer?.br ?? ""} readOnly />
             <Field label="Account description" value={customer?.name ?? ""} readOnly />
@@ -349,7 +375,7 @@ export function Deposit({
               value={tx.ccy ?? (fetched ? ENV.ccy : "")}
               required
               lov
-              onLov={() => openLov("currency", "Select currency")}
+              onLov={blocked ? undefined : () => openLov("currency", "Select currency")}
             />
             <Field
               label="Transaction amount"
@@ -357,12 +383,17 @@ export function Deposit({
               required
               number
               focus={state.currentStep === 8}
-              onChange={isAuth || !fetched ? undefined : setAmount}
+              onChange={isAuth || blocked || !fetched ? undefined : setAmount}
             />
             <Field label="Exchange rate" value={fetched ? "1.0000" : ""} readOnly number />
             <Field label="Account amount" value={tx.accAmount ?? ""} readOnly number />
             <Field label="Value date" value={ENV.date} readOnly />
-            <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} onChange={setNarrative} />
+            <Field
+              label="Narrative"
+              value={tx.narrative || "CASH DEPOSIT — COUNTER"}
+              onChange={isAuth || blocked ? undefined : setNarrative}
+              readOnly={isAuth}
+            />
           </div>
         </Section>
 
@@ -370,7 +401,7 @@ export function Deposit({
           <Tabs
             tabs={["Denomination", "Charge", "MIS / UDF"]}
             active={tab}
-            onSelect={isAuth ? undefined : setTab}
+            onSelect={setTab}
           />
           <div className="tabwrap">{tabBody}</div>
         </div>
