@@ -225,9 +225,11 @@ export function reducer(state: SessionState, action: Action): SessionState {
     }
 
     case "SET_DENOM": {
-      const defaults = DEFAULT_DENOMS[state.tx.fnId ?? ""];
+      // Fallback only for the withdrawal grid, which renders the all-zero
+      // 1001 defaults; other functions resolve their own denomination lists.
+      const defaults = state.tx.fnId === "1001" ? DEFAULT_DENOMS["1001"] : undefined;
       const denoms =
-        state.tx.denominations ?? (defaults ? defaults.map((d) => ({ ...d, units: 0 })) : undefined);
+        state.tx.denominations ?? (defaults ? defaults.map((d) => ({ ...d })) : undefined);
       if (!denoms) return state;
       const updated = denoms.map((d) =>
         d.code === action.code ? { ...d, units: parseInt(action.units || "0", 10) || 0 } : d
