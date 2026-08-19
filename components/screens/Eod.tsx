@@ -21,10 +21,10 @@ export function Eod({
 
   // Advance to the completed EOTI step once Mark EOTI succeeds.
   useEffect(() => {
-    if (state.currentStep === 28 && state.eotiMarked) {
+    if (state.currentStep === 28 && state.eotiMarked && state.message?.kind === "ok") {
       dispatch({ type: "NEXT" });
     }
-  }, [dispatch, state.currentStep, state.eotiMarked]);
+  }, [dispatch, state.currentStep, state.eotiMarked, state.message]);
 
   const tillsOpen = state.tillOpen ? 1 : 0;
   const unauth = state.transactions.filter((t) => t.status === "unauthorized").length;
