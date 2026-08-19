@@ -105,7 +105,7 @@ export function Deposit({
         dialog: null,
         currentStep: 13,
         transactions: [...state.transactions, newTx],
-        tx: { ...tx, ref: newRef, amount: amountStr, charge, misGroup: newTx.misGroup, udfSource: newTx.udfSource, udfPurpose: newTx.udfPurpose },
+        tx: { ...tx, ref: newRef, amount: amountStr, charge, misGroup: newTx.misGroup, udfSource: newTx.udfSource, udfPurpose: newTx.udfPurpose, instrumentCode: newTx.instrumentCode },
         nextSerial: state.nextSerial + 1,
         message: {
           kind: "warn",

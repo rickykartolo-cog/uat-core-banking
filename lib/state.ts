@@ -480,7 +480,7 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
 
   return {
     ...state,
-    tx: { ...state.tx, ref, misGroup: tx.misGroup, udfSource: tx.udfSource, udfPurpose: tx.udfPurpose },
+    tx: { ...state.tx, ref, misGroup: tx.misGroup, udfSource: tx.udfSource, udfPurpose: tx.udfPurpose, instrumentCode: tx.instrumentCode },
     transactions: [...state.transactions, tx],
     customers: newCustomers,
     tillBalance: unauthorized ? state.tillBalance : state.tillBalance + amount,
