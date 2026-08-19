@@ -226,7 +226,8 @@ export function reducer(state: SessionState, action: Action): SessionState {
 
     case "SET_DENOM": {
       const defaults = DEFAULT_DENOMS[state.tx.fnId ?? ""];
-      const denoms = state.tx.denominations ?? (defaults ? structuredClone(defaults) : undefined);
+      const denoms =
+        state.tx.denominations ?? (defaults ? defaults.map((d) => ({ ...d, units: 0 })) : undefined);
       if (!denoms) return state;
       const updated = denoms.map((d) =>
         d.code === action.code ? { ...d, units: parseInt(action.units || "0", 10) || 0 } : d
@@ -495,14 +496,15 @@ function rejectTx(state: SessionState, ref: string): SessionState {
 }
 
 function saveWithdrawal(state: SessionState): SessionState {
-  if (state.tx.ref && state.transactions.some((t) => t.ref === state.tx.ref)) {
+  if (state.tx.ref && state.transactions.some((t) => t.ref === state.tx.ref && t.status !== "reversed")) {
     return {
       ...state,
       message: { kind: "info", text: `Transaction ${state.tx.ref} is already saved and authorized.` },
     };
   }
   const amount = parseAmount(state.tx.amount || "0");
-  const customer = state.tx.customer!;
+  const account = state.tx.account ?? state.tx.customer?.acc;
+  const customer = (account ? state.customers[account] : undefined) ?? state.tx.customer!;
   const charge = state.tx.charge ?? 1.0;
   const required = amount + charge;
   if (required > customer.avail) {
@@ -560,7 +562,10 @@ function saveWithdrawal(state: SessionState): SessionState {
     }
   }
 
-  const ref = state.tx.ref || makeRef("CHWL", state.nextSerial);
+  const ref =
+    state.tx.ref && !state.transactions.some((t) => t.ref === state.tx.ref)
+      ? state.tx.ref
+      : makeRef("CHWL", state.nextSerial);
   const newBal = customer.bal - required;
   const newAvail = customer.avail - required;
 
