@@ -20,6 +20,9 @@ export interface Transaction {
   status: "complete" | "unauthorized" | "reversed";
   denominations: Denom[];
   mod: number;
+  misGroup?: string;
+  udfSource?: string;
+  udfPurpose?: string;
 }
 
 export interface DialogSpec {
@@ -59,6 +62,8 @@ export interface CurrentTx {
   functionId?: string;
   misGroup?: string;
   udfSource?: string;
+  udfPurpose?: string;
+  instrumentCode?: string;
   vault?: string;
   till?: string;
   branch?: string;
@@ -404,8 +409,27 @@ function denomTotal(denoms: Denom[] | undefined): number {
   return (denoms ?? []).reduce((sum, d) => sum + d.value * d.units, 0);
 }
 
+export const DEPOSIT_UDF_DEFAULTS = {
+  misGroup: "RETAIL",
+  udfSource: "BRANCH",
+  udfPurpose: "SALARY PROCEEDS",
+};
+
 function saveDeposit(state: SessionState): SessionState {
   const amount = parseAmount(state.tx.amount || "0");
+  const udfSource = (state.tx.udfSource ?? DEPOSIT_UDF_DEFAULTS.udfSource).trim();
+  if (!udfSource) {
+    return {
+      ...state,
+      dialog: {
+        kind: "err",
+        title: "Error",
+        code: "ST-UDF-001",
+        text: `Mandatory user defined field 'UDF — source' (source of funds) has no value. Enter a value before saving — this UDF feeds the CTR extract at EOD.`,
+        buttons: [{ label: "Ok", primary: true }],
+      },
+    };
+  }
   if (amount > ENV.tellerLimit) {
     return {
       ...state,
@@ -443,6 +467,9 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
     status: unauthorized ? "unauthorized" : "complete",
     denominations: state.tx.denominations ?? [],
     mod: 1,
+    misGroup: state.tx.misGroup ?? DEPOSIT_UDF_DEFAULTS.misGroup,
+    udfSource: state.tx.udfSource ?? DEPOSIT_UDF_DEFAULTS.udfSource,
+    udfPurpose: state.tx.udfPurpose ?? DEPOSIT_UDF_DEFAULTS.udfPurpose,
   };
 
   if (!unauthorized) {
