@@ -8,6 +8,7 @@ export interface Denom {
 
 export interface Transaction {
   ref: string;
+  date?: string;
   fnId: string;
   product: string;
   account: string;
@@ -160,6 +161,33 @@ export function parseAmount(s: string): number {
   const cleaned = s.replace(/,/g, "");
   const n = parseFloat(cleaned);
   return isNaN(n) ? 0 : n;
+}
+
+export function txDate(tx: Pick<Transaction, "date">): string {
+  return tx.date ?? ENV.date;
+}
+
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function isReversible(
+  tx: Transaction | undefined,
+  customers: Record<string, Customer>
+): boolean {
+  return (
+    !!tx &&
+    !!customers[tx.account] &&
+    tx.authorized &&
+    tx.status !== "unauthorized" &&
+    tx.status !== "reversed" &&
+    txDate(tx) === ENV.date
+  );
 }
 
 export function initialState(): SessionState {
@@ -426,13 +454,8 @@ function stepSnapshot(state: SessionState): SessionState {
     }
   }
 
-  if (step === 23) {
-    tx.ref = makeRef("CHWL", 2);
-  }
-
   if (step === 24) {
     tx.fnId = "Reversal";
-    tx.ref = makeRef("CHWL", 2);
     tx.reversalReason = "WRONG DENOMINATION PAID OUT";
   }
 
@@ -532,6 +555,7 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
 
   const tx: Transaction = {
     ref,
+    date: ENV.date,
     fnId: "1401",
     product: "CHDP",
     account: customer.acc,
@@ -759,6 +783,7 @@ function saveWithdrawal(state: SessionState): SessionState {
 
   const tx: Transaction = {
     ref,
+    date: ENV.date,
     fnId: "1001",
     product: "CHWL",
     account: customer.acc,
@@ -796,14 +821,85 @@ function reverseTx(state: SessionState, ref: string): SessionState {
         kind: "err",
         title: "Error",
         code: "ST-REVR-001",
-        text: `Transaction ${ref} not found.`,
+        text: `Transaction ${escapeHtml(ref)} not found.`,
         buttons: [{ label: "Ok", primary: true }],
       },
+      message: null,
     };
   }
   const tx = state.transactions[txIndex];
   if (isTillBlocked(state, tx.fnId)) {
     return { ...state, dialog: tillClosedDialog(state) };
+  }
+  if (!tx.authorized || tx.status === "unauthorized") {
+    return {
+      ...state,
+      dialog: {
+        kind: "err",
+        title: "Error",
+        code: "ST-REVR-002",
+        text: `Transaction ${escapeHtml(ref)} is unauthorized and cannot be reversed.`,
+        buttons: [{ label: "Ok", primary: true }],
+      },
+      message: null,
+    };
+  }
+  if (tx.status === "reversed") {
+    return {
+      ...state,
+      dialog: {
+        kind: "err",
+        title: "Error",
+        code: "ST-REVR-003",
+        text: `Transaction ${escapeHtml(ref)} has already been reversed.`,
+        buttons: [{ label: "Ok", primary: true }],
+      },
+      message: null,
+    };
+  }
+  if (txDate(tx) !== ENV.date) {
+    return {
+      ...state,
+      dialog: {
+        kind: "err",
+        title: "Error",
+        code: "ST-REVR-005",
+        text: `Transaction ${escapeHtml(ref)} is dated ${txDate(tx)} and cannot be reversed on business date ${ENV.date}.`,
+        buttons: [{ label: "Ok", primary: true }],
+      },
+      message: null,
+    };
+  }
+  if (!state.customers[tx.account]) {
+    return {
+      ...state,
+      dialog: {
+        kind: "err",
+        title: "Error",
+        code: "ST-REVR-006",
+        text: `Transaction ${escapeHtml(ref)} is not a customer account transaction and cannot be reversed from this screen.`,
+        buttons: [{ label: "Ok", primary: true }],
+      },
+      message: null,
+    };
+  }
+  if (tx.fnId !== "1001") {
+    for (const denomination of tx.denominations) {
+      const available = state.tillDenoms[denomination.code] ?? 0;
+      if (available < denomination.units) {
+        return {
+          ...state,
+          dialog: {
+            kind: "err",
+            title: "Error",
+            code: "ST-TILL-042",
+            text: `Till does not hold enough ${denomination.code} notes. Available ${available}, requested ${denomination.units}.`,
+            buttons: [{ label: "Ok", primary: true }],
+          },
+          message: null,
+        };
+      }
+    }
   }
   const customer = state.customers[tx.account];
   const delta = tx.fnId === "1001" ? tx.amount + tx.charge : -tx.amount + tx.charge;
@@ -816,11 +912,16 @@ function reverseTx(state: SessionState, ref: string): SessionState {
   const tillChange = tx.fnId === "1001" ? tx.amount : -tx.amount;
   return {
     ...state,
+    tx: { ...state.tx, ref },
     transactions: newTransactions,
     customers: newCustomers,
     tillBalance: state.tillBalance + tillChange,
     tillDenoms: updateTillDenoms(state.tillDenoms, tx.denominations, tx.fnId === "1001" ? "add" : "remove"),
-    message: { kind: "ok", text: `Transaction ${ref} reversed. Contra entries posted and till denominations restored.` },
+    dialog: null,
+    message: {
+      kind: "ok",
+      text: `Transaction ${ref} reversed. Contra entries posted. Account balance restored to ${ENV.ccy} ${fmt(newAvail)}. Till cash position restored to ${ENV.ccy} ${fmt(state.tillBalance + tillChange)}.`,
+    },
   };
 }
 
@@ -853,6 +954,7 @@ function transferToVault(state: SessionState): SessionState {
   const ref = makeRef("CHTV", state.nextSerial);
   const tx: Transaction = {
     ref,
+    date: ENV.date,
     fnId: "9008",
     product: "CHTV",
     account: ENV.vault,
