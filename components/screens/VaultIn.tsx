@@ -98,9 +98,16 @@ export function VaultIn({
         tillBalance: amount,
         tillDenoms,
         vaultBalance: state.vaultBalance - amount,
-        currentStep: 6,
-        viewFnId: "1401",
-        tx: {},
+        // Stay on the authorized 9007 record so the checker and till-opened message remain visible.
+        currentStep: 5,
+        viewFnId: "9007",
+        tx: {
+          ...state.tx,
+          ref,
+          amount: amountStr,
+          denominations: denoms,
+          checker: ENV.supervisor,
+        },
         message: {
           kind: "ok",
           text: `Transaction ${ref} authorized. Till ${ENV.till} opened with ${ENV.ccy} ${fmt(amount)}.`,
@@ -189,6 +196,7 @@ export function VaultIn({
           maker={ENV.teller}
           mkTime={`${ENV.date} 08:52:04`}
           checker={tx.checker}
+          ckTime={isAuthorized ? `${ENV.date} 08:55:31` : undefined}
           authorized={isAuthorized}
           recStat="Complete"
         />

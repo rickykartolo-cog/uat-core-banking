@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ENV } from "@/lib/config";
 import { SessionState, Action, fmt } from "@/lib/state";
 import { FCShell, Win, Section, Field, ActionBar, MsgBar } from "@/components/ui";
@@ -34,10 +34,21 @@ export function AuthQueue({
     },
   ];
 
-  const selectedRef = pending[0]?.ref;
+  const [picked, setPicked] = useState<string | null>(null);
+  // The selected row is always identified by its own reference.
+  const selectedRef =
+    picked && queueRows.some((r) => r.ref === picked) ? picked : queueRows[0]?.ref;
 
   const authorize = () => {
-    dispatch({ type: "GO", step: 15 });
+    if (selectedRef) {
+      dispatch({ type: "AUTHORIZE_TX", ref: selectedRef });
+    }
+  };
+
+  const view = () => {
+    if (selectedRef) {
+      dispatch({ type: "OPEN_AUTHORIZE", ref: selectedRef });
+    }
   };
 
   const reject = () => {
@@ -60,7 +71,7 @@ export function AuthQueue({
               { label: "Fetch", primary: true },
               { label: "Authorize", onClick: authorize },
               { label: "Reject", onClick: reject },
-              { label: "View", onClick: authorize },
+              { label: "View", onClick: view },
               { label: "Exit" },
             ]}
           />
@@ -98,8 +109,12 @@ export function AuthQueue({
               </tr>
             </thead>
             <tbody>
-              {queueRows.map((row, idx) => (
-                <tr key={row.ref} className={idx === 0 ? "sel" : undefined}>
+              {queueRows.map((row) => (
+                <tr
+                  key={row.ref}
+                  className={row.ref === selectedRef ? "sel" : undefined}
+                  onClick={() => setPicked(row.ref)}
+                >
                   <td>{row.fnId}</td>
                   <td>{row.ref}</td>
                   <td>{row.account}</td>
