@@ -21,15 +21,15 @@ export function Eod({
 
   // Advance to the completed EOTI step once Mark EOTI succeeds.
   useEffect(() => {
-    if (state.currentStep === 28 && !state.dialog && state.message?.kind === "ok") {
+    if (state.currentStep === 28 && state.eotiMarked) {
       dispatch({ type: "NEXT" });
     }
-  }, [dispatch, state.currentStep, state.dialog, state.message]);
+  }, [dispatch, state.currentStep, state.eotiMarked]);
 
   const tillsOpen = state.tillOpen ? 1 : 0;
   const unauth = state.transactions.filter((t) => t.status === "unauthorized").length;
   const canEoti = tillsOpen === 0 && unauth === 0;
-  const stage = state.currentStep === 29 ? "EOTI — End of transaction input" : "TI — Transaction input";
+  const stage = state.eotiMarked ? "EOTI — End of transaction input" : "TI — Transaction input";
 
   return (
     <FCShell state={state} dispatch={dispatch} current="eod">

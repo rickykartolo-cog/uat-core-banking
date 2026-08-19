@@ -81,6 +81,7 @@ export interface SessionState {
   lov: { field: string; title: string } | null;
   flags: Record<string, unknown>;
   nextSerial: number;
+  eotiMarked: boolean;
 }
 
 export const DEFAULT_DENOMS: Record<string, Denom[]> = {
@@ -143,6 +144,7 @@ export function initialState(): SessionState {
     lov: null,
     flags: {},
     nextSerial: 1,
+    eotiMarked: false,
   });
 }
 
@@ -394,6 +396,9 @@ function stepSnapshot(state: SessionState): SessionState {
 
   if (step === 29) {
     snapshot.currentUser = "BRMGR_01";
+    if (state.eotiMarked) {
+      snapshot.message = state.message;
+    }
   }
 
   const viewFnId = STEP_TO_FN[step] ?? state.viewFnId;
@@ -667,16 +672,24 @@ function markEoti(state: SessionState): SessionState {
   const openTills = state.tillOpen ? 1 : 0;
   const unauth = state.transactions.filter((t) => t.status === "unauthorized").length;
   if (openTills > 0 || unauth > 0) {
+    const blockers: string[] = [];
+    if (openTills > 0) {
+      blockers.push(`${openTills} till${openTills === 1 ? "" : "s"} still open (${ENV.till})`);
+    }
+    if (unauth > 0) {
+      blockers.push(`${unauth} unauthorized record${unauth === 1 ? "" : "s"} exist${unauth === 1 ? "s" : ""} in branch ${ENV.branch}`);
+    }
     return {
       ...state,
       message: {
         kind: "err",
-        text: `Cannot mark EOTI. ${openTills} till still open (${ENV.till}) and ${unauth} unauthorized records exist in branch ${ENV.branch}. Resolve all exceptions before proceeding.`,
+        text: `Cannot mark EOTI. ${blockers.join(" and ")}. Resolve all exceptions before proceeding.`,
       },
     };
   }
   return {
     ...state,
+    eotiMarked: true,
     message: { kind: "ok", text: `Branch ${ENV.branch} marked EOTI at 18:12. Online transaction input is now closed. EOD batch queued: interest accrual, GL proofing, statements, CTR extract, teller totals archive.` },
   };
 }
