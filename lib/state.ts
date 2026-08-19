@@ -511,7 +511,7 @@ function finalizeDeposit(state: SessionState, unauthorized: boolean): SessionSta
     transactions: [...state.transactions, tx],
     customers: newCustomers,
     tillBalance: unauthorized ? state.tillBalance : state.tillBalance + amount,
-    tillDenoms: updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "add"),
+    tillDenoms: unauthorized ? state.tillDenoms : updateTillDenoms(state.tillDenoms, state.tx.denominations ?? [], "add"),
     nextSerial: state.nextSerial + 1,
     dialog: null,
     message: unauthorized
