@@ -9,6 +9,16 @@ export default function App() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const target = e.target;
+      if (
+        target instanceof HTMLElement &&
+        (target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         dispatch({ type: "PREV" });
