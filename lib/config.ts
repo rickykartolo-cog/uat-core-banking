@@ -115,3 +115,140 @@ export const STEPS = [
   { ph: "5 · Close of day", t: "EOTI blocked by an unauthorized record", fid: "Branch batch", actor: "Branch manager (BRMGR_01)", screen: "Branch batch — EOTI blocked" },
   { ph: "5 · Close of day", t: "EOTI marked, EOD runs", fid: "Branch batch", actor: "Branch manager → system", screen: "Branch batch — EOTI complete" },
 ] as const;
+
+export interface FunctionDef {
+  id: string;
+  label: string;
+  step: number;
+  treeKey?: string;
+}
+
+export const FUNCTIONS: FunctionDef[] = [
+  { id: "Sign on", label: "Sign on", step: 0 },
+  { id: "Teller dashboard", label: "Teller dashboard", step: 1 },
+  { id: "1401", label: "Cash deposit", step: 6, treeKey: "dep" },
+  { id: "1001", label: "Cash withdrawal", step: 17, treeKey: "wdl" },
+  { id: "9007", label: "Buy cash from vault", step: 3, treeKey: "vin" },
+  { id: "9008", label: "Transfer cash to vault", step: 26, treeKey: "vout" },
+  { id: "Pending authorization", label: "Pending authorization", step: 14, treeKey: "auth" },
+  { id: "Reversal", label: "Transaction reversal", step: 23, treeKey: "rev" },
+  { id: "Till position", label: "Till position", step: 24, treeKey: "till" },
+  { id: "Branch batch", label: "Branch batch", step: 28, treeKey: "eod" },
+];
+
+export const FN_TO_STEP: Record<string, number> = Object.fromEntries(
+  FUNCTIONS.map((f) => [f.id, f.step])
+);
+
+export const FN_LABELS: Record<string, string> = Object.fromEntries(
+  FUNCTIONS.map((f) => [f.id, f.label])
+);
+
+export const STEP_TO_FN: Record<number, string> = Object.fromEntries(
+  STEPS.map((s, i) => [i, s.fid])
+) as Record<number, string>;
+
+export const TREE_KEY_TO_FN: Record<string, string> = Object.fromEntries(
+  FUNCTIONS.filter((f) => f.treeKey).map((f) => [f.treeKey, f.id])
+);
+
+export interface MenuItem {
+  label: string;
+  items: { label: string; fnId?: string; placeholder?: string }[];
+}
+
+export const MENU: MenuItem[] = [
+  {
+    label: "Interactions",
+    items: [
+      { label: "New Deposit", fnId: "1401" },
+      { label: "New Withdrawal", fnId: "1001" },
+      { label: "Buy Cash from Vault", fnId: "9007" },
+      { label: "Transfer Cash to Vault", fnId: "9008" },
+      { label: "Till Position", fnId: "Till position" },
+    ],
+  },
+  {
+    label: "Customer",
+    items: [
+      { label: "Customer search", placeholder: "Customer search would open the customer maintenance screen." },
+      { label: "Account summary", placeholder: "Account summary would display the selected customer accounts." },
+    ],
+  },
+  {
+    label: "Workflow",
+    items: [
+      { label: "Pending authorization", fnId: "Pending authorization" },
+      { label: "Transaction reversal", fnId: "Reversal" },
+      { label: "Limit override", placeholder: "Limit override would route to the supervisor queue." },
+    ],
+  },
+  {
+    label: "Batch",
+    items: [
+      { label: "Branch batch", fnId: "Branch batch" },
+      { label: "End of day", placeholder: "End of day would run the EOD batch processes." },
+    ],
+  },
+  {
+    label: "Preferences",
+    items: [
+      { label: "User settings", placeholder: "Preferences would open the user settings panel." },
+    ],
+  },
+  {
+    label: "Sign off",
+    items: [
+      { label: "Sign off", placeholder: "Sign off would end the session and return to the login screen." },
+    ],
+  },
+];
+
+export const FAST_PATH_CODES = FUNCTIONS.map((f) => ({ code: f.id, label: f.label }));
+
+export interface LovOption {
+  value: string;
+  label: string;
+}
+
+export const LOV_DATA: Record<string, LovOption[]> = {
+  account: Object.values(CUSTOMERS).map((c) => ({ value: c.acc, label: `${c.acc} — ${c.name}` })),
+  currency: [
+    { value: "SGD", label: "SGD — Singapore Dollar" },
+    { value: "USD", label: "USD — US Dollar" },
+    { value: "EUR", label: "EUR — Euro" },
+    { value: "GBP", label: "GBP — British Pound" },
+  ],
+  vault: [{ value: ENV.vault, label: `${ENV.vault} — Main vault` }],
+  till: [{ value: ENV.till, label: `${ENV.till} — Teller 1` }],
+  branch: [{ value: ENV.branch, label: `${ENV.branch} — ${ENV.branchName}` }],
+  functionId: [
+    { value: "1401", label: "1401 — Cash deposit" },
+    { value: "1001", label: "1001 — Cash withdrawal" },
+    { value: "9007", label: "9007 — Buy cash from vault" },
+    { value: "9008", label: "9008 — Transfer cash to vault" },
+    { value: "1006", label: "1006 — Account transfer" },
+  ],
+  ref: [
+    { value: "000CHWL262300012", label: "000CHWL262300012 — Cash withdrawal" },
+    { value: "000CHDP262300001", label: "000CHDP262300001 — Cash deposit" },
+    { value: "000CHAT262300004", label: "000CHAT262300004 — Account transfer" },
+  ],
+  maker: [
+    { value: "ALL", label: "ALL — All makers" },
+    { value: ENV.teller, label: `${ENV.teller} — Teller` },
+    { value: ENV.supervisor, label: `${ENV.supervisor} — Supervisor` },
+    { value: "BRMGR_01", label: "BRMGR_01 — Branch manager" },
+  ],
+  misGroup: [
+    { value: "RETAIL", label: "RETAIL — Retail banking" },
+    { value: "CORPORATE", label: "CORPORATE — Corporate banking" },
+    { value: "WEALTH", label: "WEALTH — Wealth management" },
+  ],
+  udfSource: [
+    { value: "BRANCH", label: "BRANCH — Branch counter" },
+    { value: "COUNTER", label: "COUNTER — Teller counter" },
+    { value: "ONLINE", label: "ONLINE — Internet banking" },
+    { value: "ATM", label: "ATM — Self service" },
+  ],
+};

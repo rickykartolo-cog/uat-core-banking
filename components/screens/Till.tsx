@@ -101,13 +101,14 @@ export function Till({
 
   return (
     <FCShell
-      user={state.currentUser}
-      till={ENV.till}
+      state={state}
+      dispatch={dispatch}
       current="till"
       dialog={state.dialog ? <Dialog spec={state.dialog} onButton={closeDialog} /> : undefined}
     >
       <Win
         title="Till position and balancing"
+        dispatch={dispatch}
         actions={
           <ActionBar
             buttons={[

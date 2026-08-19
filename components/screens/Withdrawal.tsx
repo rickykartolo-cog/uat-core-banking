@@ -127,6 +127,9 @@ export function Withdrawal({
 
   const handleDialog = () => dispatch({ type: "CLOSE_DIALOG" });
 
+  const openLov = (field: string, title: string) =>
+    dispatch({ type: "OPEN_LOV", field, title });
+
   const chargeTab = (
     <table className="g">
       <thead>
@@ -193,14 +196,15 @@ export function Withdrawal({
 
   return (
     <FCShell
-      user={state.currentUser}
-      till={ENV.till}
+      state={state}
+      dispatch={dispatch}
       current="wdl"
       dialog={state.dialog ? <Dialog spec={state.dialog} onButton={handleDialog} /> : undefined}
     >
       <Win
         fid="1001"
         title="Cash withdrawal"
+        dispatch={dispatch}
         actions={
           <ActionBar
             buttons={[
@@ -219,7 +223,13 @@ export function Withdrawal({
           <div className="grid2">
             <Field label="Transaction reference" value={ref} readOnly />
             <Field label="Transaction date" value={ENV.date} readOnly />
-            <Field label="Account number" value={customer.acc} required lov />
+            <Field
+              label="Account number"
+              value={customer.acc}
+              required
+              lov
+              onLov={() => openLov("account", "Select account")}
+            />
             <Field label="Account branch" value={customer.br} readOnly />
             <Field label="Account description" value={customer.name} readOnly />
             <Field label="Account class" value={customer.cls} readOnly />
@@ -240,7 +250,13 @@ export function Withdrawal({
 
         <Section title="Transaction details">
           <div className="grid2">
-            <Field label="Transaction currency" value={ENV.ccy} required lov />
+            <Field
+              label="Transaction currency"
+              value={tx.ccy ?? ENV.ccy}
+              required
+              lov
+              onLov={() => openLov("currency", "Select currency")}
+            />
             <Field
               label="Transaction amount"
               value={amountStr}

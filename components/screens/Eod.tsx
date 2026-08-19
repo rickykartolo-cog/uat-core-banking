@@ -32,9 +32,10 @@ export function Eod({
   const stage = state.currentStep === 29 ? "EOTI — End of transaction input" : "TI — Transaction input";
 
   return (
-    <FCShell user={state.currentUser} till={ENV.till} current="eod">
+    <FCShell state={state} dispatch={dispatch} current="eod">
       <Win
         title="Branch batch — end of transaction input"
+        dispatch={dispatch}
         actions={
           <ActionBar
             buttons={[

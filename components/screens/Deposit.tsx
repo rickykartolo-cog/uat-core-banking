@@ -68,6 +68,9 @@ export function Deposit({
   const setDenom = (code: string, units: string) =>
     dispatch({ type: "SET_DENOM", code, units });
 
+  const setNarrative = (v: string) =>
+    dispatch({ type: "APPLY", partial: { tx: { ...tx, narrative: v } } });
+
   const save = () => dispatch({ type: "SAVE_DEPOSIT" });
 
   const parkUnauthorized = () => {
@@ -129,6 +132,9 @@ export function Deposit({
     }
   };
 
+  const openLov = (field: string, title: string) =>
+    dispatch({ type: "OPEN_LOV", field, title });
+
   const chargeTab = (
     <table className="g">
       <thead>
@@ -173,11 +179,21 @@ export function Deposit({
 
   const misTab = (
     <div className="grid2">
-      <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} />
+      <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} onChange={setNarrative} />
       <Field label="Instrument code" value="" />
-      <Field label="MIS group" value="RETAIL" lov />
+      <Field
+        label="MIS group"
+        value={tx.misGroup ?? "RETAIL"}
+        lov
+        onLov={() => openLov("misGroup", "Select MIS group")}
+      />
       <Field label="Cost centre" value="BR000-TELLER" readOnly />
-      <Field label="UDF — source" value="BRANCH" lov />
+      <Field
+        label="UDF — source"
+        value={tx.udfSource ?? "BRANCH"}
+        lov
+        onLov={() => openLov("udfSource", "Select UDF source")}
+      />
       <Field label="UDF — purpose" value="SALARY PROCEEDS" />
     </div>
   );
@@ -202,14 +218,15 @@ export function Deposit({
 
   return (
     <FCShell
-      user={state.currentUser}
-      till={ENV.till}
+      state={state}
+      dispatch={dispatch}
       current={isAuth ? "auth" : "dep"}
       dialog={state.dialog ? <Dialog spec={state.dialog} onButton={handleDialog} /> : undefined}
     >
       <Win
         fid="1401"
         title="Cash deposit"
+        dispatch={dispatch}
         actions={
           <ActionBar
             buttons={
@@ -246,6 +263,7 @@ export function Deposit({
               focus={state.currentStep === 6}
               onChange={isAuth ? undefined : setAccount}
               onBlur={isAuth ? undefined : fetchAccount}
+              onLov={() => openLov("account", "Select account")}
             />
             <Field label="Account branch" value={customer?.br ?? ""} readOnly />
             <Field label="Account description" value={customer?.name ?? ""} readOnly />
@@ -272,9 +290,10 @@ export function Deposit({
           <div className="grid2">
             <Field
               label="Transaction currency"
-              value={fetched ? ENV.ccy : ""}
+              value={tx.ccy ?? (fetched ? ENV.ccy : "")}
               required
               lov
+              onLov={() => openLov("currency", "Select currency")}
             />
             <Field
               label="Transaction amount"
@@ -287,7 +306,7 @@ export function Deposit({
             <Field label="Exchange rate" value={fetched ? "1.0000" : ""} readOnly number />
             <Field label="Account amount" value={tx.accAmount ?? ""} readOnly number />
             <Field label="Value date" value={ENV.date} readOnly />
-            <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} />
+            <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} onChange={setNarrative} />
           </div>
         </Section>
 

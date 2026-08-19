@@ -12,13 +12,13 @@ export function Login({
   dispatch: React.Dispatch<Action>;
 }) {
   return (
-    <FCShell user={state.currentUser} till={ENV.till}>
+    <FCShell state={state} dispatch={dispatch}>
       <div style={{ padding: "30px 0", display: "flex", justifyContent: "center" }}>
         <div className="win" style={{ width: 340 }}>
           <div className="win-title">
             <span>Sign on</span>
             <span className="btns">
-              <i>&#10005;</i>
+              <i onClick={() => dispatch({ type: "PLACEHOLDER", message: "Window closed (placeholder)." })}>&#10005;</i>
             </span>
           </div>
           <div style={{ padding: "14px 16px", background: "#eff3f8" }}>
@@ -35,7 +35,7 @@ export function Login({
                     primary: true,
                     onClick: () => {
                       dispatch({ type: "LOGIN", user: "OPS_USER1" });
-                      dispatch({ type: "NEXT" });
+                      dispatch({ type: "GO", step: 1 });
                     },
                   },
                   { label: "Clear" },

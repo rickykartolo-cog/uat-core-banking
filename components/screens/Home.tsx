@@ -4,13 +4,13 @@ import { ENV } from "@/lib/config";
 import { SessionState, Action, fmt } from "@/lib/state";
 import { FCShell, Win, Section, Field } from "@/components/ui";
 
-export function Home({ state }: { state: SessionState; dispatch?: React.Dispatch<Action> }) {
+export function Home({ state, dispatch }: { state: SessionState; dispatch: React.Dispatch<Action> }) {
   const stage = "TI — Transaction input";
   const pending = state.transactions.filter((t) => t.status === "unauthorized");
 
   return (
-    <FCShell user={state.currentUser} till={ENV.till}>
-      <Win title="Teller dashboard">
+    <FCShell state={state} dispatch={dispatch}>
+      <Win title="Teller dashboard" dispatch={dispatch}>
         <Section title="Branch status">
           <div className="grid3">
             <Field label="Branch code" value={ENV.branch} readOnly />

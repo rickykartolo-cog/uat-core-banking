@@ -1,4 +1,4 @@
-import { ENV, CUSTOMERS, Customer } from "./config";
+import { ENV, CUSTOMERS, Customer, FN_TO_STEP, STEP_TO_FN } from "./config";
 
 export interface Denom {
   code: string;
@@ -31,7 +31,7 @@ export interface DialogSpec {
 }
 
 export interface MessageSpec {
-  kind: "ok" | "warn" | "err";
+  kind: "ok" | "warn" | "err" | "info";
   text: string;
 }
 
@@ -55,10 +55,18 @@ export interface CurrentTx {
   reversalReason?: string;
   checker?: string;
   authorized?: boolean;
+  maker?: string;
+  functionId?: string;
+  misGroup?: string;
+  udfSource?: string;
+  vault?: string;
+  till?: string;
+  branch?: string;
 }
 
 export interface SessionState {
   currentStep: number;
+  viewFnId: string;
   currentUser: string;
   loggedIn: boolean;
   tillOpen: boolean;
@@ -70,6 +78,7 @@ export interface SessionState {
   tx: CurrentTx;
   dialog: DialogSpec | null;
   message: MessageSpec | null;
+  lov: { field: string; title: string } | null;
   flags: Record<string, unknown>;
   nextSerial: number;
 }
@@ -119,6 +128,7 @@ export function parseAmount(s: string): number {
 export function initialState(): SessionState {
   return stepSnapshot({
     currentStep: 0,
+    viewFnId: "",
     currentUser: ENV.teller,
     loggedIn: false,
     tillOpen: false,
@@ -130,6 +140,7 @@ export function initialState(): SessionState {
     tx: {},
     dialog: null,
     message: null,
+    lov: null,
     flags: {},
     nextSerial: 1,
   });
@@ -155,7 +166,11 @@ export type Action =
   | { type: "UPDATE_COUNTED"; code: string; units: string }
   | { type: "MARK_EOTI" }
   | { type: "CLOSE_DIALOG" }
-  | { type: "CLEAR_MSG" };
+  | { type: "CLEAR_MSG" }
+  | { type: "LAUNCH_FUNCTION"; fnId: string }
+  | { type: "PLACEHOLDER"; message: string }
+  | { type: "OPEN_LOV"; field: string; title: string }
+  | { type: "CLOSE_LOV" };
 
 export function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
@@ -166,10 +181,10 @@ export function reducer(state: SessionState, action: Action): SessionState {
       return stepSnapshot({ ...state, currentStep: action.step });
 
     case "NEXT":
-      return { ...state, currentStep: Math.min(state.currentStep + 1, 29), dialog: null, message: null };
+      return stepSnapshot({ ...state, currentStep: Math.min(state.currentStep + 1, 29) });
 
     case "PREV":
-      return { ...state, currentStep: Math.max(state.currentStep - 1, 0), dialog: null, message: null };
+      return stepSnapshot({ ...state, currentStep: Math.max(state.currentStep - 1, 0) });
 
     case "LOGIN":
       return { ...state, currentUser: action.user, loggedIn: true };
@@ -251,6 +266,20 @@ export function reducer(state: SessionState, action: Action): SessionState {
 
     case "CLEAR_MSG":
       return { ...state, message: null };
+
+    case "LAUNCH_FUNCTION": {
+      const step = FN_TO_STEP[action.fnId] ?? 0;
+      return stepSnapshot({ ...state, currentStep: step });
+    }
+
+    case "PLACEHOLDER":
+      return { ...state, message: { kind: "info", text: action.message }, dialog: null };
+
+    case "OPEN_LOV":
+      return { ...state, lov: { field: action.field, title: action.title }, dialog: null, message: null };
+
+    case "CLOSE_LOV":
+      return { ...state, lov: null };
 
     default:
       return state;
@@ -367,7 +396,8 @@ function stepSnapshot(state: SessionState): SessionState {
     snapshot.currentUser = "BRMGR_01";
   }
 
-  return { ...state, ...snapshot, tx };
+  const viewFnId = STEP_TO_FN[step] ?? state.viewFnId;
+  return { ...state, ...snapshot, tx, viewFnId };
 }
 
 function denomTotal(denoms: Denom[] | undefined): number {

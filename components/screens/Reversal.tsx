@@ -52,15 +52,19 @@ export function Reversal({
     dispatch({ type: "CLOSE_DIALOG" });
   };
 
+  const openLov = (field: string, title: string) =>
+    dispatch({ type: "OPEN_LOV", field, title });
+
   return (
     <FCShell
-      user={state.currentUser}
-      till={ENV.till}
+      state={state}
+      dispatch={dispatch}
       current="rev"
       dialog={state.dialog ? <Dialog spec={state.dialog} onButton={handleDialog} /> : undefined}
     >
       <Win
         title="Transaction reversal"
+        dispatch={dispatch}
         actions={
           <ActionBar
             buttons={[
@@ -75,7 +79,14 @@ export function Reversal({
         <Section title="Query">
           <div className="grid3">
             <Field label="Branch" value={ENV.branch} readOnly />
-            <Field label="Transaction reference" value={ref} required lov focus />
+            <Field
+              label="Transaction reference"
+              value={ref}
+              required
+              lov
+              focus
+              onLov={() => openLov("ref", "Select transaction reference")}
+            />
             <Field label="Transaction date" value={ENV.date} readOnly />
           </div>
         </Section>

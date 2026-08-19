@@ -46,10 +46,14 @@ export function AuthQueue({
     }
   };
 
+  const openLov = (field: string, title: string) =>
+    dispatch({ type: "OPEN_LOV", field, title });
+
   return (
-    <FCShell user={state.currentUser} till={ENV.till} current="auth">
+    <FCShell state={state} dispatch={dispatch} current="auth">
       <Win
         title="Pending authorization"
+        dispatch={dispatch}
         actions={
           <ActionBar
             buttons={[
@@ -65,8 +69,18 @@ export function AuthQueue({
         <Section title="Selection criteria">
           <div className="grid3">
             <Field label="Branch" value={ENV.branch} readOnly />
-            <Field label="Function id" value="1401" lov />
-            <Field label="Maker" value="ALL" lov />
+            <Field
+              label="Function id"
+              value={state.tx.functionId ?? "1401"}
+              lov
+              onLov={() => openLov("functionId", "Select function id")}
+            />
+            <Field
+              label="Maker"
+              value={state.tx.maker ?? "ALL"}
+              lov
+              onLov={() => openLov("maker", "Select maker")}
+            />
           </div>
         </Section>
 
