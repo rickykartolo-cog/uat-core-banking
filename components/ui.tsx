@@ -9,7 +9,7 @@ import {
   LOV_DATA,
   TREE_KEY_TO_FN,
 } from "@/lib/config";
-import { DialogSpec, MessageSpec, Denom, fmt, SessionState, Action } from "@/lib/state";
+import { DialogSpec, MessageSpec, Denom, fmt, SessionState, Action, txDate } from "@/lib/state";
 
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -235,7 +235,12 @@ export function LovDialog({ state, dispatch }: { state: SessionState; dispatch: 
 
   if (!lov) return null;
 
-  const options = LOV_DATA[lov.field] ?? [];
+  const options =
+    lov.field === "ref"
+      ? state.transactions
+          .filter((t) => txDate(t) === ENV.date)
+          .map((t) => ({ value: t.ref, label: `${t.ref} — ${t.product} — ${t.account}` }))
+      : LOV_DATA[lov.field] ?? [];
   const q = query.toLowerCase();
   const filtered = options.filter(
     (o) => o.value.toLowerCase().includes(q) || o.label.toLowerCase().includes(q)
