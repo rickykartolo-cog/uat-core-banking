@@ -6,6 +6,7 @@ import {
   Action,
   Transaction,
   DEFAULT_DENOMS,
+  DEPOSIT_UDF_DEFAULTS,
   fmt,
   parseAmount,
   makeRef,
@@ -92,6 +93,10 @@ export function Deposit({
       status: "unauthorized",
       denominations: denoms,
       mod: 1,
+      misGroup: tx.misGroup ?? DEPOSIT_UDF_DEFAULTS.misGroup,
+      udfSource: (tx.udfSource ?? DEPOSIT_UDF_DEFAULTS.udfSource).trim(),
+      udfPurpose: tx.udfPurpose ?? DEPOSIT_UDF_DEFAULTS.udfPurpose,
+      instrumentCode: tx.instrumentCode,
     };
 
     dispatch({
@@ -100,7 +105,7 @@ export function Deposit({
         dialog: null,
         currentStep: 13,
         transactions: [...state.transactions, newTx],
-        tx: { ...tx, ref: newRef, amount: amountStr, charge },
+        tx: { ...tx, ref: newRef, amount: amountStr, charge, misGroup: newTx.misGroup, udfSource: newTx.udfSource, udfPurpose: newTx.udfPurpose, instrumentCode: newTx.instrumentCode },
         nextSerial: state.nextSerial + 1,
         message: {
           kind: "warn",
@@ -177,24 +182,37 @@ export function Deposit({
     </table>
   );
 
+  const setTxField = (key: "misGroup" | "udfSource" | "udfPurpose" | "instrumentCode") => (v: string) =>
+    dispatch({ type: "APPLY", partial: { tx: { ...tx, [key]: v } } });
+
+  const misGroup = (isAuth ? existingTx?.misGroup : tx.misGroup) ?? DEPOSIT_UDF_DEFAULTS.misGroup;
+  const udfSource = (isAuth ? existingTx?.udfSource : tx.udfSource) ?? DEPOSIT_UDF_DEFAULTS.udfSource;
+  const udfPurpose = (isAuth ? existingTx?.udfPurpose : tx.udfPurpose) ?? DEPOSIT_UDF_DEFAULTS.udfPurpose;
+  const instrumentCode = (isAuth ? existingTx?.instrumentCode : tx.instrumentCode) ?? "";
+
   const misTab = (
     <div className="grid2">
-      <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} onChange={setNarrative} />
-      <Field label="Instrument code" value="" />
+      <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} onChange={isAuth ? undefined : setNarrative} readOnly={isAuth} />
+      <Field label="Instrument code" value={instrumentCode} onChange={isAuth ? undefined : setTxField("instrumentCode")} readOnly={isAuth} />
       <Field
         label="MIS group"
-        value={tx.misGroup ?? "RETAIL"}
-        lov
-        onLov={() => openLov("misGroup", "Select MIS group")}
+        value={misGroup}
+        readOnly={isAuth}
+        onChange={isAuth ? undefined : setTxField("misGroup")}
+        lov={!isAuth}
+        onLov={isAuth ? undefined : () => openLov("misGroup", "Select MIS group")}
       />
       <Field label="Cost centre" value="BR000-TELLER" readOnly />
       <Field
         label="UDF — source"
-        value={tx.udfSource ?? "BRANCH"}
-        lov
-        onLov={() => openLov("udfSource", "Select UDF source")}
+        value={udfSource}
+        required
+        readOnly={isAuth}
+        onChange={isAuth ? undefined : setTxField("udfSource")}
+        lov={!isAuth}
+        onLov={isAuth ? undefined : () => openLov("udfSource", "Select UDF source")}
       />
-      <Field label="UDF — purpose" value="SALARY PROCEEDS" />
+      <Field label="UDF — purpose" value={udfPurpose} onChange={isAuth ? undefined : setTxField("udfPurpose")} readOnly={isAuth} />
     </div>
   );
 
@@ -362,7 +380,7 @@ export function Deposit({
             <Field label="Exchange rate" value={fetched ? "1.0000" : ""} readOnly number />
             <Field label="Account amount" value={tx.accAmount ?? ""} readOnly number />
             <Field label="Value date" value={ENV.date} readOnly />
-            <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} onChange={setNarrative} />
+            <Field label="Narrative" value={tx.narrative || "CASH DEPOSIT — COUNTER"} onChange={isAuth ? undefined : setNarrative} readOnly={isAuth} />
           </div>
         </Section>
 
@@ -370,7 +388,7 @@ export function Deposit({
           <Tabs
             tabs={["Denomination", "Charge", "MIS / UDF"]}
             active={tab}
-            onSelect={isAuth ? undefined : setTab}
+            onSelect={setTab}
           />
           <div className="tabwrap">{tabBody}</div>
         </div>
