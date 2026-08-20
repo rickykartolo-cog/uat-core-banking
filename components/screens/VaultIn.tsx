@@ -81,10 +81,12 @@ export function VaultIn({
       return;
     }
 
-    openTill();
+    openTill(false);
   };
 
-  const openTill = () => {
+  // `viaOverride` records who actually authorized: within the retention limit the
+  // transaction is auto-authorized, matching the "Auto" checker used elsewhere.
+  const openTill = (viaOverride: boolean) => {
     const tillDenoms: Record<string, number> = {};
     for (const d of denoms) {
       tillDenoms[d.code] = (tillDenoms[d.code] ?? 0) + d.units;
@@ -98,9 +100,16 @@ export function VaultIn({
         tillBalance: amount,
         tillDenoms,
         vaultBalance: state.vaultBalance - amount,
-        currentStep: 6,
-        viewFnId: "1401",
-        tx: {},
+        // Stay on the authorized 9007 record so the checker and till-opened message remain visible.
+        currentStep: 5,
+        viewFnId: "9007",
+        tx: {
+          ...state.tx,
+          ref,
+          amount: amountStr,
+          denominations: structuredClone(denoms),
+          checker: viaOverride ? ENV.supervisor : "Auto",
+        },
         message: {
           kind: "ok",
           text: `Transaction ${ref} authorized. Till ${ENV.till} opened with ${ENV.ccy} ${fmt(amount)}.`,
@@ -111,7 +120,7 @@ export function VaultIn({
 
   const handleDialog = (action?: string) => {
     if (action === "CONFIRM_VAULT_OVERRIDE") {
-      openTill();
+      openTill(true);
     } else {
       dispatch({ type: "CLOSE_DIALOG" });
     }
@@ -189,6 +198,7 @@ export function VaultIn({
           maker={ENV.teller}
           mkTime={`${ENV.date} 08:52:04`}
           checker={tx.checker}
+          ckTime={isAuthorized ? `${ENV.date} 08:55:31` : undefined}
           authorized={isAuthorized}
           recStat="Complete"
         />

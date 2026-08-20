@@ -37,7 +37,7 @@ export function Deposit({
   dispatch: React.Dispatch<Action>;
 }) {
   const tx = state.tx;
-  const isAuth = state.currentStep === 15 || state.currentStep === 16;
+  const isAuth = tx.mode === "authorize" || state.currentStep === 15 || state.currentStep === 16;
   const account = tx.account ?? "";
   const customer = tx.customer;
   const fetched = !!customer;
@@ -110,18 +110,14 @@ export function Deposit({
     });
   };
 
+  // Authorization acts on the reference loaded on this screen and stays on the record so the
+  // checker can see the posted figures and the maker-checker audit trail.
   const authorize = () => {
-    if (ref) {
-      dispatch({ type: "AUTHORIZE_TX", ref });
-      dispatch({ type: "NEXT" });
-    }
+    if (ref) dispatch({ type: "AUTHORIZE_TX", ref });
   };
 
   const reject = () => {
-    if (ref) {
-      dispatch({ type: "REJECT_TX", ref });
-      dispatch({ type: "GO", step: 14 });
-    }
+    if (ref) dispatch({ type: "REJECT_TX", ref });
   };
 
   const handleDialog = (action?: string) => {
